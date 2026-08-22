@@ -6,6 +6,7 @@ import "./styles.css";
 import "./hallmark.css";
 import "./mobile-header.css";
 import "./light-theme.css";
+import "./home.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

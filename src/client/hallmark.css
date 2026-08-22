@@ -15,6 +15,7 @@
   --h-accent: oklch(88% 0.19 125);
   --h-accent-soft: oklch(31% 0.072 126);
   --h-accent-ink: oklch(18% 0.04 125);
+  --h-mark: var(--h-accent);
   --h-danger: oklch(68% 0.18 28);
   --h-danger-soft: oklch(24% 0.055 28);
   --h-warning: oklch(78% 0.14 82);
@@ -580,7 +581,7 @@ a:active,
 .upload-track span,
 .progress-track span,
 .history-progress i {
-  background: var(--h-accent);
+  background: var(--h-mark);
 }
 
 .form-error,
@@ -629,7 +630,7 @@ a:active,
 .result-label,
 .section-label,
 .progress-status span {
-  color: var(--h-accent);
+  color: var(--h-mark);
   font-family: var(--font-mono);
 }
 
@@ -729,7 +730,7 @@ a:active,
 .history-status.done i,
 .status-dot.done,
 .key-state.configured i {
-  background: var(--h-accent);
+  background: var(--h-mark);
 }
 
 .history-status.processing i,
@@ -771,7 +772,7 @@ a:active,
 .admin-heading > div > span,
 .admin-section-head > div > span,
 .job-detail-section-head > div > span {
-  color: var(--h-accent);
+  color: var(--h-mark);
   font-family: var(--font-mono);
 }
 
@@ -797,7 +798,7 @@ a:active,
 }
 
 .admin-source i.online {
-  background: var(--h-accent);
+  background: var(--h-mark);
 }
 
 .admin-stats {
@@ -871,8 +872,8 @@ a:active,
 }
 
 .key-state.configured {
-  border-color: var(--h-accent-soft);
-  color: var(--h-accent);
+  border-color: var(--h-line-strong);
+  color: var(--h-mark);
   background: var(--h-accent-soft);
 }
 
@@ -941,7 +942,7 @@ a:active,
 }
 
 .admin-login > span {
-  color: var(--h-accent);
+  color: var(--h-mark);
   font-family: var(--font-mono);
 }
 
@@ -993,9 +994,9 @@ a:active,
 }
 
 .job-detail-chips span {
-  border-color: var(--h-accent-soft);
+  border-color: var(--h-line-strong);
   border-radius: 4px;
-  color: var(--h-accent);
+  color: var(--h-mark);
   background: var(--h-accent-soft);
 }
 

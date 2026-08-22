@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
 import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
 
@@ -36,7 +36,7 @@ const copy = {
     deleteFailed: "Could not delete this analysis.",
     badge: "VIDEO INTELLIGENCE WORKSPACE",
     hero: "Turn video into data you can use.",
-    intro: "Koma understands what was said and shown, then turns it into a replayable timeline, structured JSON, subtitles, reports, and ready-to-use files.",
+    intro: "Give Koma a video. Get the moments, subtitles, summary, or specific information you actually need.",
     flowVideo: "VIDEO",
     flowSignals: "AUDIO + FRAMES",
     flowOutput: "DATA + FILES",
@@ -57,10 +57,15 @@ const copy = {
     urlPlaceholder: "https://v.douyin.com/… or a direct video URL",
     urlHint: "Supports Douyin share links, Bilibili, YouTube and other public video URLs.",
     temporary: "Saved for permanent replay",
-    customExtract: "Custom extraction",
-    customHint: "Ask for specific data, JSON, subtitles, reports, or downloadable files",
-    presetsLabel: "ANALYSIS TEMPLATES",
-    presetsHint: "Start from a useful request, then edit every detail",
+    customExtract: "Advanced options",
+    customHint: "Open only when you need custom fields, instructions, or file formats",
+    advancedDescription: "Customize the analysis request, JSON shape, and downloadable file formats without changing the main page.",
+    advancedConfigured: "Configured",
+    advancedRequirement: "Custom request",
+    cancelSettings: "Cancel",
+    applySettings: "Apply settings",
+    presetsLabel: "What do you need?",
+    presetsHint: "Optional · Skip this for a complete summary, chapters, and subtitles",
     analysisRequirement: "Analysis requirement",
     instructionPlaceholder: "Example: Extract every product mentioned, its price, and the first timestamp where it appears.",
     outputShape: "Expected JSON shape (optional)",
@@ -141,7 +146,7 @@ const copy = {
     aboutTitle: "How to use Koma",
     aboutText: "From a video to a replayable analysis and ready-to-use files.",
     aboutSteps: [
-      { title: "1 · Submit a video", text: "Upload a local video or paste a public URL. Pick an analysis template or open Custom extraction to specify the data, JSON shape, output language, and files you need." },
+      { title: "1 · Submit a video", text: "Upload a local video or paste a public URL. Pick an outcome if you need structured information, subtitles, or a report; otherwise just start the analysis." },
       { title: "2 · Review the result", text: "Koma combines audio and key frames into a summary, chapters, tags, subtitles, structured data, and generated files. Click any timestamp, subtitle, chapter, tag, or key frame to return to that moment." },
       { title: "3 · Return from My jobs", text: "My jobs lists analyses submitted from this browser. You can reopen a running or completed job and permanently delete your own video, frames, result, and generated files." },
       { title: "4 · Share or administer", text: "Anyone with an unguessable replay link can view the result but cannot delete it. Administrators use Manage to configure providers and encrypted keys, inspect every job's request and result, and perform global deletion." }
@@ -179,7 +184,7 @@ const copy = {
     deleteFailed: "没有成功删除这次分析。",
     badge: "视频理解与数据提取工作台",
     hero: "把视频，变成可以使用的数据。",
-    intro: "Koma 同时理解视频里说了什么、出现了什么，再把内容整理成可回看的时间线、结构化 JSON、字幕、报告和可直接使用的文件。",
+    intro: "给 Koma 一段视频，得到关键内容、字幕、总结，或者你真正需要的信息。",
     flowVideo: "视频",
     flowSignals: "声音 + 画面",
     flowOutput: "数据 + 文件",
@@ -200,10 +205,15 @@ const copy = {
     urlPlaceholder: "https://v.douyin.com/… 或视频直链",
     urlHint: "支持抖音分享链接、B站、YouTube 等公开链接与视频直链。",
     temporary: "保存为可永久回看的任务",
-    customExtract: "自定义提取",
-    customHint: "写下分析要求，可返回 JSON、字幕、报告或可下载文件",
-    presetsLabel: "分析模板",
-    presetsHint: "从常用要求开始，所有内容都可以继续修改",
+    customExtract: "高级设置",
+    customHint: "只有需要自定义字段、要求或文件格式时才打开",
+    advancedDescription: "在这里自定义分析要求、JSON 结构和输出文件，不会改变首页长度。",
+    advancedConfigured: "已配置",
+    advancedRequirement: "自定义要求",
+    cancelSettings: "取消",
+    applySettings: "应用设置",
+    presetsLabel: "你想得到什么？",
+    presetsHint: "可选 · 不选择也会生成完整总结、章节和字幕",
     analysisRequirement: "分析要求",
     instructionPlaceholder: "例如：提取视频中出现的所有商品、价格，以及首次出现的时间。",
     outputShape: "期望 JSON 结构（可选）",
@@ -284,7 +294,7 @@ const copy = {
     aboutTitle: "如何使用 Koma",
     aboutText: "从一段视频，得到可回看、可定位、可下载的完整分析结果。",
     aboutSteps: [
-      { title: "1 · 提交视频", text: "上传本地视频或粘贴公开视频地址。可以直接选择分析模板，也可以展开“自定义提取”，指定要抓取的数据、JSON 结构、返回语言和文件格式。" },
+      { title: "1 · 提交视频", text: "上传本地视频或粘贴公开视频地址。需要信息、字幕或报告时可以选一个结果类型；只想快速理解内容则直接开始分析。" },
       { title: "2 · 查看分析结果", text: "Koma 会结合声音和关键帧生成总结、章节、标签、字幕、结构化数据与文件。点击时间、字幕、章节、标签或关键帧，都能跳回视频对应位置。" },
       { title: "3 · 从“我的任务”回来", text: "“我的任务”会列出这个浏览器提交的分析。可以重新打开执行中或已完成的任务，也可以永久删除自己的原视频、关键帧、结果和生成文件。" },
       { title: "4 · 分享与管理", text: "拿到不可猜回看链接的人可以查看结果，但不能删除。管理员从“管理”进入后台，配置 Provider 和加密 Key，查看全部任务的要求与结果，并执行全局删除。" }
@@ -311,22 +321,22 @@ interface AnalysisPreset { id: "extract" | "subtitles" | "report"; label: string
 function analysisPresets(language: Language): AnalysisPreset[] {
   if (language === "zh") return [
     {
-      id: "extract", label: "结构化信息", description: "人物、商品、数字与时间点", formats: ["json", "csv"],
+      id: "extract", label: "提取信息", description: "人物、商品、数字与时间点", formats: ["json", "csv"],
       instruction: "提取视频中出现的关键人物、组织、商品、数字和重要观点，并记录每项首次出现的时间。只返回视频中有明确依据的信息。",
       outputSchema: { items: [{ type: "string", name: "string", value: "string", evidence: "string", atMs: 0 }] }
     },
     {
-      id: "subtitles", label: "多语言字幕", description: "生成中英文可下载字幕", formats: ["srt"],
+      id: "subtitles", label: "双语字幕", description: "可下载的中英文字幕", formats: ["srt"],
       instruction: "生成两份完整 SRT 字幕：zh-CN.srt 使用简体中文，en-US.srt 使用自然英文。保留准确时间轴，不遗漏有意义的口语内容。"
     },
     {
-      id: "report", label: "内容报告", description: "摘要、结论、行动项与引用", formats: ["markdown"],
+      id: "report", label: "整理报告", description: "摘要、结论与行动项", formats: ["markdown"],
       instruction: "生成一份结构清晰的中文 Markdown 报告，包含执行摘要、核心观点、关键证据及时间点、结论和可执行行动项。"
     }
   ];
   return [
     {
-      id: "extract", label: "Structured data", description: "People, products, numbers, and moments", formats: ["json", "csv"],
+      id: "extract", label: "Extract information", description: "People, products, numbers, and moments", formats: ["json", "csv"],
       instruction: "Extract the key people, organizations, products, numbers, and claims in the video, including the first timestamp for each item. Include only information supported by the video.",
       outputSchema: { items: [{ type: "string", name: "string", value: "string", evidence: "string", atMs: 0 }] }
     },
@@ -335,7 +345,7 @@ function analysisPresets(language: Language): AnalysisPreset[] {
       instruction: "Generate two complete SRT subtitle files: zh-CN.srt in Simplified Chinese and en-US.srt in natural English. Preserve accurate timing and all meaningful speech."
     },
     {
-      id: "report", label: "Content report", description: "Summary, findings, actions, and citations", formats: ["markdown"],
+      id: "report", label: "Organized report", description: "Summary, findings, and actions", formats: ["markdown"],
       instruction: "Create a well-structured English Markdown report with an executive summary, key findings, timestamped evidence, conclusions, and actionable next steps."
     }
   ];
@@ -390,20 +400,27 @@ function App() {
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showCustomExtraction, setShowCustomExtraction] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [outputSchema, setOutputSchema] = useState("");
   const [artifactFormats, setArtifactFormats] = useState<ArtifactFormat[]>([]);
   const [activePreset, setActivePreset] = useState<AnalysisPreset["id"] | null>(null);
   const [serviceInfo, setServiceInfo] = useState<ServiceInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const advancedTriggerRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const hasResult = job?.status === "done" && job.result;
   const progress = job?.progress?.percent ?? 0;
   const maxMinutes = Math.max(1, Math.round((serviceInfo?.limits?.maxDurationSeconds || 15 * 60) / 60));
   const maxMegabytes = Math.max(1, Math.round((serviceInfo?.limits?.maxUploadBytes || 500 * 1024 * 1024) / 1024 / 1024));
   const fileHint = language === "zh" ? `MP4、MOV、WebM · 最长 ${maxMinutes} 分钟 / ${maxMegabytes} MB` : `MP4, MOV, WebM · up to ${maxMinutes} min / ${maxMegabytes} MB`;
-  const privacy = language === "zh" ? "永久回看 · 管理自己的任务" : "Permanent replay · Manage your jobs";
+  const sourceError = error === t.missingFile || error === t.missingUrl;
+  const hasAdvancedSettings = Boolean(instruction.trim() || outputSchema.trim() || artifactFormats.length);
+  const advancedSummaryParts = Array.from(new Set([instruction.trim() ? t.advancedRequirement : "", outputSchema.trim() ? "JSON" : "", ...artifactFormats.map((format) => format === "markdown" ? "MD" : format.toUpperCase())].filter(Boolean)));
+  const advancedSummary = hasAdvancedSettings ? `${t.advancedConfigured} · ${advancedSummaryParts.join(" + ")}` : t.customHint;
 
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
@@ -428,6 +445,23 @@ function App() {
       .catch(() => undefined);
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    function handlePointerDown(event: globalThis.PointerEvent) {
+      if (moreMenuRef.current?.contains(event.target as Node)) return;
+      setShowMoreMenu(false);
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") setShowMoreMenu(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showMoreMenu]);
 
   useEffect(() => {
     const match = window.location.pathname.match(/^\/jobs\/([a-f0-9-]{20,64})\/?$/i);
@@ -481,7 +515,11 @@ function App() {
         window.history.replaceState({}, "", `/jobs/${body.jobId}`);
       }
     } catch (submitError) {
-      setError(translateServerError(submitError instanceof Error ? submitError.message : String(submitError), language));
+      const message = submitError instanceof Error ? submitError.message : String(submitError);
+      const clientMessage = message === t.missingFile || message === t.missingUrl || message === t.invalidSchema;
+      setError(clientMessage ? message : translateServerError(message, language));
+      if (message === t.missingUrl) urlInputRef.current?.focus();
+      if (message === t.missingFile) dropZoneRef.current?.focus();
     } finally { setBusy(false); setUploadPercent(null); }
   }
 
@@ -553,26 +591,19 @@ function App() {
   // 点 Logo 回到首页只离开当前视图；永久任务继续处理并保留。
   function goHome() { leaveJob(); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
-  function toggleArtifactFormat(format: ArtifactFormat) {
-    setActivePreset(null);
-    setArtifactFormats((current) => current.includes(format) ? current.filter((item) => item !== format) : [...current, format]);
-  }
   function applyPreset(preset: AnalysisPreset) {
     setInstruction(preset.instruction);
     setOutputSchema(preset.outputSchema === undefined ? "" : JSON.stringify(preset.outputSchema, null, 2));
     setArtifactFormats([...preset.formats]);
     setActivePreset(preset.id);
-    setShowCustomExtraction(true);
     setError("");
   }
 
   return <div className="app-shell">
     <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
-      <span className="privacy-pill"><i />{privacy}</span>
       <button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
       <button className="header-button" type="button" onClick={() => setShowHistory(true)}><Glyph name="clock" size={16} />{t.history}</button>
-      <a className="header-button" href="/admin"><Glyph name="settings" size={16} />{t.admin}</a>
-      <button className="header-button" type="button" onClick={() => setShowSettings(true)}><Glyph name="info" size={16} />{t.help}</button>
+      <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" aria-label={`${t.admin} / ${t.help}`} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button></div>}</div>
     </div></div></header>
 
     <main className="main-shell">
@@ -581,41 +612,48 @@ function App() {
           <div className="hero-badge"><span />{t.badge}</div>
           <h1>{t.hero}</h1>
           <p>{t.intro}</p>
-          <div className="hero-flow" aria-label={`${t.flowVideo}, ${t.flowSignals}, ${t.flowOutput}`}><span>{t.flowVideo}</span><i /><span>{t.flowSignals}</span><i /><strong>{t.flowOutput}</strong></div>
-          <div className="feature-row">
-            <div><Glyph name="frame" /><span><strong>{t.homeUnderstand}</strong><small>{t.homeUnderstandSub}</small></span></div>
-            <div><Glyph name="spark" /><span><strong>{t.homeExtract}</strong><small>{t.homeExtractSub}</small></span></div>
-            <div><Glyph name="arrow" /><span><strong>{t.homeDeliver}</strong><small>{t.homeDeliverSub}</small></span></div>
-          </div>
         </div>
 
-        <form className="capture-card" onSubmit={startAnalysis}>
-          <div className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><img src="/koma-icon-64.png" alt="" /></div>
-          <div className="mode-switch" role="tablist" aria-label={t.sourceLabel}>
-            <button className={mode === "upload" ? "selected" : ""} type="button" onClick={() => setMode("upload")}><Glyph name="upload" size={15} />{t.upload}</button>
-            <button className={mode === "url" ? "selected" : ""} type="button" onClick={() => setMode("url")}><Glyph name="link" size={15} />{t.videoUrl}</button>
+        <form className="capture-card" onSubmit={startAnalysis} aria-busy={busy} aria-label={t.startOne}>
+          <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><img src="/koma-icon-64.png" alt="" /></header>
+          <div className="workbench-source">
+            <h3 id="video-source-heading" className="workbench-section-label">{t.sourceLabel}</h3>
+            <div className="mode-switch" role="group" aria-label={t.sourceLabel}>
+              <button className={mode === "upload" ? "selected" : ""} type="button" aria-pressed={mode === "upload"} onClick={() => setMode("upload")}><Glyph name="upload" size={16} />{t.upload}</button>
+              <button className={mode === "url" ? "selected" : ""} type="button" aria-pressed={mode === "url"} onClick={() => setMode("url")}><Glyph name="link" size={16} />{t.videoUrl}</button>
+            </div>
+            {mode === "upload" ? <div ref={dropZoneRef} className={`drop-zone ${file ? "has-file" : ""}`} onClick={() => fileInputRef.current?.click()} onDragOver={(event: DragEvent) => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }} role="button" tabIndex={0} aria-invalid={error === t.missingFile} aria-describedby={error === t.missingFile ? "analysis-form-error" : undefined} onKeyDown={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click(); }}>
+              <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
+              <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : fileHint}</small>
+            </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} aria-invalid={error === t.missingUrl} aria-describedby={error === t.missingUrl ? "analysis-form-error" : undefined} /><small>{t.urlHint}</small></label>}
+            {sourceError && <p id="analysis-form-error" className="form-error" role="alert">{error}</p>}
           </div>
-          {mode === "upload" ? <div className={`drop-zone ${file ? "has-file" : ""}`} onClick={() => fileInputRef.current?.click()} onDragOver={(event: DragEvent) => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }} role="button" tabIndex={0} onKeyDown={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click(); }}>
-            <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
-            <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : fileHint}</small>
-          </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} /><small>{t.urlHint}</small></label>}
-          <div className="preset-panel"><div className="preset-panel-head"><span>{t.presetsLabel}</span><small>{t.presetsHint}</small></div><div className="preset-list">{analysisPresets(language).map((preset) => <button key={preset.id} type="button" className={activePreset === preset.id ? "selected" : ""} aria-pressed={activePreset === preset.id} onClick={() => applyPreset(preset)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><em>{preset.formats.map((format) => format === "markdown" ? "MD" : format.toUpperCase()).join(" + ")}</em></button>)}</div></div>
-          <div className={`custom-extraction ${showCustomExtraction ? "open" : ""} ${instruction.trim() || outputSchema.trim() || artifactFormats.length ? "configured" : ""}`}>
-            <button className="custom-extraction-toggle" type="button" aria-expanded={showCustomExtraction} onClick={() => setShowCustomExtraction((value) => !value)}><span><Glyph name="spark" size={15} /><strong>{t.customExtract}</strong><small>{t.customHint}</small></span><i>{showCustomExtraction ? "−" : "+"}</i></button>
-            {showCustomExtraction && <div className="custom-extraction-fields">
-              <label><span>{t.analysisRequirement}</span><textarea value={instruction} onChange={(event) => { setInstruction(event.target.value); setActivePreset(null); }} maxLength={4000} rows={3} placeholder={t.instructionPlaceholder} /></label>
-              <label><span>{t.outputShape}</span><textarea className="schema-input" value={outputSchema} onChange={(event) => { setOutputSchema(event.target.value); setActivePreset(null); }} maxLength={12000} rows={6} spellCheck={false} placeholder={t.schemaPlaceholder} /><small>{t.schemaHint}</small></label>
-              <fieldset className="artifact-format-field"><legend>{t.outputFiles}</legend><small>{t.outputFilesHint}</small><div className="artifact-format-list">{(["json", "csv", "markdown", "srt", "text"] as ArtifactFormat[]).map((format) => <button key={format} type="button" className={artifactFormats.includes(format) ? "selected" : ""} aria-pressed={artifactFormats.includes(format)} onClick={() => toggleArtifactFormat(format)}>{format === "markdown" ? "Markdown" : format.toUpperCase()}</button>)}</div></fieldset>
-            </div>}
-          </div>
+          <section className="workbench-analysis" aria-labelledby="analysis-mode-heading">
+            <h3 id="analysis-mode-heading" className="workbench-section-label">{t.presetsLabel}</h3>
+            <p className="workbench-section-hint">{t.presetsHint}</p>
+            <div className="preset-panel"><div className="preset-list">{analysisPresets(language).map((preset) => <button key={preset.id} type="button" className={activePreset === preset.id ? "selected" : ""} aria-pressed={activePreset === preset.id} onClick={() => applyPreset(preset)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><em>{preset.formats.map((format) => format === "markdown" ? "MD" : format.toUpperCase()).join(" + ")}</em></button>)}</div></div>
+            <div className={`custom-extraction ${showAdvancedSettings ? "open" : ""} ${hasAdvancedSettings ? "configured" : ""}`}>
+              <button ref={advancedTriggerRef} className="custom-extraction-toggle" type="button" aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => setShowAdvancedSettings(true)}><span><Glyph name="spark" size={15} /><strong>{t.customExtract}</strong><small>{advancedSummary}</small></span><i aria-hidden="true">→</i></button>
+            </div>
+          </section>
           <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy}>{busy ? (uploadPercent !== null ? `${t.uploading} ${uploadPercent}%` : t.starting) : t.start}<Glyph name="arrow" size={17} /></button></div>
           {uploadPercent !== null && <div className="upload-track" aria-label={`${t.uploadProgress}: ${uploadPercent}%`}><span style={{ width: `${uploadPercent}%` }} /></div>}
-          {error && <p className="form-error" role="alert">{error}</p>}
+          {error && !sourceError && <p id="analysis-form-error" className="form-error" role="alert">{error}</p>}
         </form>
       </section>}
       {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} language={language} />}
       {hasResult && <ResultView job={job} onRestart={restartAnalysis} onDelete={deleteOwnedJob} language={language} />}
     </main>
+    {showAdvancedSettings && <AdvancedSettingsDialog language={language} instruction={instruction} outputSchema={outputSchema} artifactFormats={artifactFormats} returnFocusRef={advancedTriggerRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
+      const formatsChanged = next.artifactFormats.length !== artifactFormats.length || next.artifactFormats.some((format, index) => format !== artifactFormats[index]);
+      const changed = next.instruction !== instruction || next.outputSchema !== outputSchema || formatsChanged;
+      setInstruction(next.instruction);
+      setOutputSchema(next.outputSchema);
+      setArtifactFormats(next.artifactFormats);
+      if (changed) setActivePreset(null);
+      setShowAdvancedSettings(false);
+      setError("");
+    }} />}
     {showHistory && <HistoryModal onClose={() => setShowHistory(false)} onOpen={openHistoryJob} onDelete={deleteOwnedJob} language={language} />}
     {showSettings && <InfoModal onClose={() => setShowSettings(false)} language={language} />}
   </div>;
@@ -735,6 +773,113 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+interface AdvancedSettingsValue {
+  instruction: string;
+  outputSchema: string;
+  artifactFormats: ArtifactFormat[];
+}
+
+function AdvancedSettingsDialog({ language, instruction, outputSchema, artifactFormats, returnFocusRef, onCancel, onApply }: {
+  language: Language;
+  instruction: string;
+  outputSchema: string;
+  artifactFormats: ArtifactFormat[];
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
+  onCancel: () => void;
+  onApply: (value: AdvancedSettingsValue) => void;
+}) {
+  const t = copy[language];
+  const [draftInstruction, setDraftInstruction] = useState(instruction);
+  const [draftSchema, setDraftSchema] = useState(outputSchema);
+  const [draftFormats, setDraftFormats] = useState<ArtifactFormat[]>([...artifactFormats]);
+  const [dialogError, setDialogError] = useState("");
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const schemaRef = useRef<HTMLTextAreaElement>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    const root = document.documentElement;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const previousRootOverflow = root.style.overflow;
+    const previousOverflow = document.body.style.overflow;
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])"
+    ].join(",");
+    const keepFocusInside = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+      if (!focusable.length) {
+        event.preventDefault();
+        titleRef.current?.focus();
+        return;
+      }
+      const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      if (event.shiftKey && activeIndex <= 0) {
+        event.preventDefault();
+        focusable[focusable.length - 1]?.focus();
+      } else if (!event.shiftKey && (activeIndex === -1 || activeIndex === focusable.length - 1)) {
+        event.preventDefault();
+        focusable[0]?.focus();
+      }
+    };
+    dialog.showModal();
+    dialog.addEventListener("keydown", keepFocusInside, true);
+    root.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => titleRef.current?.focus());
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      dialog.removeEventListener("keydown", keepFocusInside, true);
+      if (dialog.open) dialog.close();
+      root.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousOverflow;
+      window.scrollTo(scrollX, scrollY);
+      window.requestAnimationFrame(() => returnFocusRef.current?.focus());
+    };
+  }, [returnFocusRef]);
+
+  function toggleDraftFormat(format: ArtifactFormat) {
+    setDraftFormats((current) => current.includes(format) ? current.filter((item) => item !== format) : [...current, format]);
+  }
+
+  function applySettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      parseOutputSchema(draftSchema, t.invalidSchema);
+    } catch (cause) {
+      setDialogError(cause instanceof Error ? cause.message : t.invalidSchema);
+      schemaRef.current?.focus();
+      return;
+    }
+    onApply({ instruction: draftInstruction, outputSchema: draftSchema, artifactFormats: [...draftFormats] });
+  }
+
+  return <dialog ref={dialogRef} className="advanced-dialog" aria-modal="true" aria-labelledby="advanced-dialog-title" aria-describedby="advanced-dialog-description" onCancel={(event) => { event.preventDefault(); onCancelRef.current(); }} onClick={(event) => { if (event.target === event.currentTarget) onCancelRef.current(); }}>
+    <form className="advanced-dialog-shell" onSubmit={applySettings}>
+      <header className="advanced-dialog-head">
+        <div><span className="page-label">KOMA OPTIONS</span><h2 ref={titleRef} id="advanced-dialog-title" tabIndex={-1}>{t.customExtract}</h2><p id="advanced-dialog-description">{t.advancedDescription}</p></div>
+        <button className="advanced-dialog-close" type="button" onClick={onCancel} aria-label={t.close}>×</button>
+      </header>
+      <div className="advanced-dialog-body custom-extraction-fields">
+        <label><span>{t.analysisRequirement}</span><textarea value={draftInstruction} onChange={(event) => setDraftInstruction(event.target.value)} maxLength={4000} rows={4} placeholder={t.instructionPlaceholder} /></label>
+        <label><span>{t.outputShape}</span><textarea ref={schemaRef} className="schema-input" value={draftSchema} onChange={(event) => { setDraftSchema(event.target.value); setDialogError(""); }} maxLength={12000} rows={8} spellCheck={false} placeholder={t.schemaPlaceholder} aria-invalid={Boolean(dialogError)} aria-describedby={dialogError ? "advanced-schema-error" : "advanced-schema-hint"} /><small id="advanced-schema-hint">{t.schemaHint}</small>{dialogError && <small id="advanced-schema-error" className="advanced-dialog-error" role="alert">{dialogError}</small>}</label>
+        <fieldset className="artifact-format-field"><legend>{t.outputFiles}</legend><small>{t.outputFilesHint}</small><div className="artifact-format-list">{(["json", "csv", "markdown", "srt", "text"] as ArtifactFormat[]).map((format) => <button key={format} type="button" className={draftFormats.includes(format) ? "selected" : ""} aria-pressed={draftFormats.includes(format)} onClick={() => toggleDraftFormat(format)}>{format === "markdown" ? "Markdown" : format.toUpperCase()}</button>)}</div></fieldset>
+      </div>
+      <footer className="advanced-dialog-foot"><button className="advanced-dialog-cancel" type="button" onClick={onCancel}>{t.cancelSettings}</button><button className="primary-button" type="submit">{t.applySettings}<Glyph name="arrow" size={17} /></button></footer>
+    </form>
+  </dialog>;
 }
 
 function HistoryModal({ onClose, onOpen, onDelete, language }: { onClose: () => void; onOpen: (id: string) => Promise<void>; onDelete: (id: string) => Promise<boolean>; language: Language }) {

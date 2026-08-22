@@ -11,19 +11,20 @@
 
   --h-ink: oklch(20% 0.012 130);
   --h-ink-2: oklch(37% 0.012 130);
-  --h-muted: oklch(54% 0.012 130);
+  --h-muted: oklch(47% 0.012 130);
 
   --h-line: oklch(87% 0.012 110);
-  --h-line-strong: oklch(76% 0.015 112);
+  --h-line-strong: oklch(63% 0.016 112);
 
   --h-accent: oklch(79% 0.205 124);
   --h-accent-soft: oklch(94% 0.07 125);
   --h-accent-ink: oklch(20% 0.04 125);
+  --h-mark: oklch(43% 0.13 124);
 
-  --h-danger: oklch(56% 0.19 28);
+  --h-danger: oklch(52% 0.19 28);
   --h-danger-soft: oklch(96% 0.035 28);
   --h-warning: oklch(68% 0.14 82);
-  --h-focus: oklch(66% 0.19 124);
+  --h-focus: oklch(48% 0.15 124);
 
   /* Media remains intentionally dark so video and key frames retain contrast. */
   --h-video: oklch(9% 0.006 150);
