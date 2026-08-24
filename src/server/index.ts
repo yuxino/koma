@@ -15,6 +15,7 @@ import { normalizeVideoUrl } from "./url-source.js";
 import { parseByteRange } from "./video-stream.js";
 import { createDailyLimiter } from "./rate-limit.js";
 import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis-spec.js";
+import { generateAnalysisSpec, validateAnalysisSpecGenerationInstruction, validateAnalysisSpecGenerationLanguage } from "./analysis-spec-ai.js";
 import { contentDisposition } from "./artifacts.js";
 import {
   adminAuthEnabled,
@@ -50,13 +51,34 @@ app.get("/api/health", async () => {
     analysisProvider: providers.vision.provider,
     models: { asr: providers.asr.model || null, vision: providers.vision.model || null },
     limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds },
-    features: { customExtraction: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, viewerHistory: true, viewerOwnedDeletion: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled() },
+    features: { customExtraction: true, analysisSpecGeneration: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, viewerHistory: true, viewerOwnedDeletion: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled() },
     configured: { asr: asrConfigured, vision: visionConfigured, analysis: visionConfigured },
     database: { driver: databaseDriver() },
     storage: storageHealth(),
     demoLimitPerIpPerDay: config.demoRequestsPerIpPerDay || null,
     mock: { asr: providers.asr.provider === "mock", vision: providers.vision.provider === "mock", analysis: providers.vision.provider === "mock" }
   };
+});
+
+app.post("/api/analysis-spec/generate", { bodyLimit: 16 * 1024 }, async (request, reply) => {
+  reply.header("cache-control", "no-store");
+  let instruction: string;
+  try {
+    const body = request.body as { instruction?: unknown; lang?: unknown } | undefined;
+    instruction = validateAnalysisSpecGenerationInstruction(
+      body?.instruction
+    );
+    validateAnalysisSpecGenerationLanguage(body?.lang);
+  } catch (error) {
+    return reply.code(400).send({ error: messageOf(error) });
+  }
+  // Invalid input must not consume the same public demo allowance used by analysis jobs.
+  if (!acceptDemoRequest(request, reply)) return;
+  try {
+    return reply.send(await generateAnalysisSpec({ instruction }));
+  } catch (error) {
+    return reply.code(statusCodeOf(error) || 502).send({ error: messageOf(error) });
+  }
 });
 
 app.get("/api/admin/session", async (request, reply) => {

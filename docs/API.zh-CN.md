@@ -2,6 +2,35 @@
 
 Koma 的分析任务是异步的。提交视频后轮询任务，完成后既可以读取完整视频理解结果，也可以只取自定义提取出的 JSON。
 
+## 用 AI 整理 JSON 结构
+
+提交视频前，可以让已配置的视觉 Provider 把自然语言要求整理成可编辑的 JSON 示例：
+
+```bash
+curl -X POST http://localhost:3000/api/analysis-spec/generate \
+  -H 'content-type: application/json' \
+  -d '{
+    "instruction": "提取所有商品、价格和首次出现时间",
+    "lang": "zh"
+  }'
+```
+
+这个请求不会创建任务，也不会分析视频。返回的 `outputSchema` 一定是对象或数组，可以先检查、编辑，再提交给 `/api/analyze/url` 或 `/api/analyze/upload`：
+
+```json
+{
+  "outputSchema": {
+    "products": [
+      { "name": "string", "price": 0, "atMs": 0 }
+    ]
+  }
+}
+```
+
+`instruction` 必填，最长 4000 字符；`lang` 可省略，仅支持 `en` 或 `zh`。请求体上限为 16 KiB，成功响应包含 `cache-control: no-store`。
+
+只有配置了真实视觉 Provider 及其凭据时，这个接口才可用。它与视频分析共用演示额度，无效请求会在消耗额度前被拒绝。无效输入返回 `400`，请求体过大返回 `413`，演示额度耗尽返回 `429`，Provider 调用失败或返回无效 JSON 结构返回 `502`，视觉 Provider 不可用或未配置返回 `503`。
+
 ## 视频地址
 
 ```bash

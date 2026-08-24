@@ -13,6 +13,9 @@ describe("translateServerError", () => {
     expect(translateServerError("今天的公开演示次数已经用完，请明天再来。", "en")).toContain("public demo allowance");
     expect(translateServerError("画面模型没有按要求返回结构化提取结果，请重试。", "en")).toContain("structured data");
     expect(translateServerError("自定义结构化提取需要配置真实的视觉模型。", "en")).toContain("requires a configured vision model");
+    expect(translateServerError("生成 JSON 配置时模型请求失败，请稍后重试。", "en")).toContain("JSON shape");
+    expect(translateServerError("模型没有返回可用的 JSON 配置，请调整描述后重试。", "en")).toContain("JSON shape");
+    expect(translateServerError("生成 JSON 配置需要先配置真实的视觉模型。", "en")).toContain("configured vision model");
   });
 
   it("maps speaker diarization errors to English", () => {

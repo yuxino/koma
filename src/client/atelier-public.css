@@ -613,6 +613,7 @@
 }
 
 .app-shell .url-field input::placeholder,
+.app-shell .analysis-request-field textarea::placeholder,
 .app-shell .custom-extraction-fields textarea::placeholder {
   color: var(--muted);
   opacity: .72;
@@ -630,158 +631,271 @@
   line-height: 1.5;
 }
 
-.app-shell .preset-panel {
-  min-width: 0;
-}
-
-.app-shell .preset-list {
+.app-shell .analysis-request-field {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.app-shell .preset-list button {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 100px;
-  align-content: space-between;
-  gap: 12px;
-  padding: 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  background: var(--surface-strong);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 150ms ease, transform 150ms ease, background 150ms ease;
-}
-
-.app-shell .preset-list button:hover {
-  border-color: var(--line-strong);
-  transform: translateY(-1px);
-}
-
-.app-shell .preset-list button.selected {
-  border-color: var(--ink);
-  background: var(--accent-soft);
-}
-
-.app-shell .preset-list button.selected::after {
-  content: "";
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: inset 0 0 0 1px rgba(23, 23, 22, .25);
-}
-
-.app-shell .preset-list button > span {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-}
-
-.app-shell .preset-list strong {
-  padding-right: 12px;
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 720;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-shell .preset-list small {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.app-shell .preset-list em {
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 720;
-  letter-spacing: .035em;
-}
-
-.app-shell .custom-extraction {
-  margin-top: 10px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-strong);
-}
-
-.app-shell .custom-extraction.configured {
-  border-color: var(--ink);
-  background: var(--accent-soft);
-}
-
-.app-shell .custom-extraction-toggle {
+.app-shell .analysis-request-label {
   display: flex;
-  width: 100%;
-  min-width: 0;
-  min-height: 58px;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 14px;
-  padding: 10px 14px;
-  border: 0;
+  gap: 18px;
+}
+
+.app-shell .analysis-request-label strong {
   color: var(--ink);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.app-shell .custom-extraction-toggle:hover {
-  background: var(--paper);
-}
-
-.app-shell .custom-extraction.configured .custom-extraction-toggle:hover {
-  background: var(--accent-soft);
-}
-
-.app-shell .custom-extraction-toggle > span {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 3px 8px;
-}
-
-.app-shell .custom-extraction-toggle .glyph {
-  grid-row: 1 / 3;
-}
-
-.app-shell .custom-extraction-toggle strong {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.app-shell .custom-extraction-toggle small {
+.app-shell .analysis-request-label small {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.app-shell .analysis-request-label small.over-limit {
+  color: var(--danger);
+}
+
+.app-shell .analysis-request-field textarea {
+  width: 100%;
   min-width: 0;
-  overflow: hidden;
+  min-height: 108px;
+  resize: vertical;
+  padding: 13px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  outline: 0;
+  color: var(--ink);
+  background: var(--surface-strong);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.app-shell .analysis-request-field textarea:focus {
+  border-color: var(--ink);
+  background: var(--surface);
+}
+
+.app-shell .analysis-suggestions {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.app-shell .analysis-suggestions > span {
   color: var(--muted);
   font-size: 10px;
+}
+
+.app-shell .analysis-suggestions > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.app-shell .analysis-suggestions button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-2);
+  background: var(--surface-strong);
+  font-size: 10px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.app-shell .analysis-suggestions button:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.app-shell .analysis-suggestions button.selected {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
+.app-shell .analysis-suggestions button i {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.app-shell .json-workflow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 13px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-2);
+}
+
+.app-shell .json-workflow.configured {
+  border-color: var(--line-strong);
+  background: var(--surface-strong);
+}
+
+.app-shell .json-workflow-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-shell .json-workflow-status > span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.app-shell .json-workflow.configured .json-workflow-status > span {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(23, 23, 22, .24);
+}
+
+.app-shell .json-workflow-status > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.app-shell .json-workflow-status strong {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-shell .json-workflow-status small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.app-shell .json-workflow-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-shell .json-workflow-actions button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink-2);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-shell .json-workflow-actions button:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.app-shell .json-workflow-actions .json-ai-button {
+  border-color: var(--ink);
+  color: var(--surface-strong);
+  background: var(--ink);
+}
+
+.app-shell .json-workflow-actions .json-ai-button:hover {
+  color: var(--surface-strong);
+  background: #2d2c29;
+}
+
+.app-shell .analysis-config-error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.app-shell .config-memory {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 9px;
+}
+
+.app-shell .config-memory > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-shell .custom-extraction-toggle > i {
+.app-shell .config-memory > span i {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.app-shell .config-memory > div {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.app-shell .config-memory button {
+  min-height: 30px;
+  padding: 0 7px;
+  border: 0;
   color: var(--muted);
-  font-size: 19px;
-  font-style: normal;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.app-shell .config-memory button:hover {
+  color: var(--ink);
+}
+
+.app-shell .config-memory button:disabled {
+  cursor: default;
+  opacity: .38;
 }
 
 .app-shell .capture-foot {
@@ -961,8 +1075,7 @@
   gap: 8px;
 }
 
-.app-shell .custom-extraction-fields label > span,
-.app-shell .artifact-format-field legend {
+.app-shell .custom-extraction-fields label > span {
   color: var(--ink);
   font-size: 12px;
   font-weight: 700;
@@ -992,14 +1105,13 @@
 }
 
 .app-shell .custom-extraction-fields .schema-input {
-  min-height: 190px;
+  min-height: 360px;
   font-family: var(--font-mono);
   font-size: 12px;
   tab-size: 2;
 }
 
-.app-shell .custom-extraction-fields small,
-.app-shell .artifact-format-field > small {
+.app-shell .custom-extraction-fields small {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.5;
@@ -1010,51 +1122,75 @@
   font-weight: 650;
 }
 
-.app-shell .artifact-format-field {
-  display: grid;
-  min-width: 0;
-  gap: 7px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.app-shell .artifact-format-field legend {
-  margin: 0 0 2px;
-  padding: 0;
-}
-
-.app-shell .artifact-format-list {
+.app-shell .json-editor-status {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 5px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 8px 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper-2);
 }
 
-.app-shell .artifact-format-list button {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+.app-shell .json-editor-status > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
   color: var(--ink-2);
-  background: var(--surface-strong);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
+}
+
+.app-shell .json-editor-status > span i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.app-shell .json-editor-status.valid > span i {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(23, 23, 22, .24);
+}
+
+.app-shell .json-editor-status.invalid > span,
+.app-shell .json-editor-status.invalid > span i {
+  color: var(--danger);
+}
+
+.app-shell .json-editor-status.invalid > span i {
+  background: var(--danger);
+}
+
+.app-shell .json-editor-status > div {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.app-shell .json-editor-status button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--ink-2);
+  background: var(--surface);
+  font-size: 9px;
+  font-weight: 680;
   white-space: nowrap;
   cursor: pointer;
 }
 
-.app-shell .artifact-format-list button:hover {
+.app-shell .json-editor-status button:hover {
   border-color: var(--line-strong);
   color: var(--ink);
-}
-
-.app-shell .artifact-format-list button.selected {
-  border-color: var(--ink);
-  color: var(--ink);
-  background: var(--accent-soft);
 }
 
 .app-shell .advanced-dialog-foot {
@@ -2734,24 +2870,38 @@
   }
 
   .app-shell .url-field input,
+  .app-shell .analysis-request-field textarea,
   .app-shell .custom-extraction-fields textarea,
   .app-shell .custom-extraction-fields .schema-input {
     font-size: 16px;
   }
 
-  .app-shell .preset-list {
-    grid-template-columns: minmax(0, 1fr);
+  .app-shell .json-workflow {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 11px;
   }
 
-  .app-shell .preset-list button {
-    min-height: 72px;
+  .app-shell .json-workflow-actions {
+    display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    align-content: center;
   }
 
-  .app-shell .preset-list em {
-    text-align: right;
+  .app-shell .config-memory {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .app-shell .config-memory > span {
+    white-space: normal;
+  }
+
+  .app-shell .analysis-suggestions button,
+  .app-shell .json-workflow-actions button,
+  .app-shell .config-memory button,
+  .app-shell .json-editor-status button {
+    min-height: 44px;
   }
 
   .app-shell .capture-foot {
@@ -3036,6 +3186,14 @@
 
   .app-shell .hero-copy > h1 {
     font-size: clamp(40px, 12.5vw, 49px);
+  }
+
+  .app-shell .json-workflow-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell .json-workflow-actions button {
+    width: 100%;
   }
 
   .app-shell .hero-character {

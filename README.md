@@ -12,7 +12,7 @@ Koma turns a video into a replayable result with summaries, chapters, subtitles,
 - Upload a local video or paste a Douyin/Bilibili link. Install `yt-dlp` for YouTube and more sites.
 - Combine audio and key frames into summaries, chapters, tags, subtitles, and scene captions.
 - Jump from any chapter, tag, subtitle, or frame to the matching moment.
-- Extract custom JSON and export JSON, CSV, Markdown, SRT, or TXT.
+- Describe the data you need, let AI shape editable JSON, and reuse the saved browser configuration. API/CLI clients can still export JSON, CSV, Markdown, SRT, or TXT.
 - Save replayable jobs, manage your own history, and configure providers from `/admin`.
 
 ## Quick start
@@ -26,7 +26,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-Without API keys, Koma runs in mock mode. Custom extraction and generated files require a real vision provider. See [Configuration](docs/CONFIGURATION.md).
+Without API keys, Koma runs in mock mode. AI-built JSON shapes, custom extraction, and generated files require a real vision provider. See [Configuration](docs/CONFIGURATION.md).
 
 ## CLI
 

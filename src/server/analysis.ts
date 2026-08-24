@@ -5,6 +5,7 @@ import { assertMatchesOutputShape, hasCustomAnalysis, hasExtractionRequest, type
 import { missingArtifactFormats, normalizeArtifacts } from "./artifacts.js";
 import { getRuntimeProviders, type RuntimeProvider } from "./provider-runtime.js";
 import type { VisionProvider } from "./config.js";
+import { requestChatCompletion } from "./chat-completion.js";
 
 export type AnalysisLanguage = "en" | "zh";
 
@@ -122,19 +123,13 @@ async function analyzeWithVisionModel({ title, durationMs, frames, transcript, f
     config.visionTranscriptChars
   );
   const prompt = buildAnalysisPrompt({ title, durationMs, transcriptText, language, analysisSpec });
-  const response = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${provider.apiKey}`,
-      "content-type": "application/json",
-      ...(provider.provider === "openrouter" ? { "HTTP-Referer": "https://github.com/yuxino/koma", "X-Title": "Koma" } : {})
-    },
-    body: JSON.stringify({ model: provider.model, temperature: 0.2, max_tokens: analysisSpec.artifactFormats?.length ? config.artifactMaxTokens : config.visionMaxTokens, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(config.aiTimeoutMs)]) : AbortSignal.timeout(config.aiTimeoutMs)
+  const raw = await requestChatCompletion({
+    provider,
+    userContent: [{ type: "text", text: prompt }, ...frameContent],
+    temperature: 0.2,
+    maxTokens: analysisSpec.artifactFormats?.length ? config.artifactMaxTokens : config.visionMaxTokens,
+    signal
   });
-  const body = await response.json().catch(() => ({})) as { error?: { message?: string }; message?: string; choices?: Array<{ message?: { content?: unknown } }> };
-  if (!response.ok) throw new Error(body.error?.message || body.message || `画面模型请求失败：${response.status}`);
-  const raw = body.choices?.[0]?.message?.content || "";
   return normalizeVisionModelResult({ raw, fallbackTitle: title, durationMs, frames, transcript, language, analysisSpec });
 }
 

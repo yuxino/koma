@@ -2,6 +2,35 @@
 
 Koma analysis jobs are asynchronous. Submit a video, poll the job, then retrieve either the complete video-understanding result or only the requested JSON.
 
+## Build a JSON shape with AI
+
+Use the configured vision provider to turn a natural-language request into an editable JSON example before submitting a video:
+
+```bash
+curl -X POST http://localhost:3000/api/analysis-spec/generate \
+  -H 'content-type: application/json' \
+  -d '{
+    "instruction": "Extract every product, price, and first appearance time",
+    "lang": "en"
+  }'
+```
+
+The response is not a job and contains no video analysis. `outputSchema` is always an object or array suitable for review, editing, and later use with `/api/analyze/url` or `/api/analyze/upload`:
+
+```json
+{
+  "outputSchema": {
+    "products": [
+      { "name": "string", "price": 0, "atMs": 0 }
+    ]
+  }
+}
+```
+
+`instruction` is required and limited to 4,000 characters. `lang` is optional and accepts `en` or `zh`. The request body is limited to 16 KiB, and successful responses include `cache-control: no-store`.
+
+The endpoint is available only when a real vision provider and its credentials are configured. It uses the same demo allowance as video analysis: invalid input is rejected before allowance is consumed. Errors are `400` for invalid input, `413` for an oversized body, `429` when the demo allowance is exhausted, `502` when the provider fails or returns an invalid JSON shape, and `503` when the vision provider is unavailable or not configured.
+
 ## Video URL
 
 ```bash

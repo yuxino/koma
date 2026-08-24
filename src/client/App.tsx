@@ -1,4 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
+import {
+  ANALYSIS_SUGGESTION_IDS,
+  MAX_ANALYSIS_INSTRUCTION_CHARS,
+  MAX_OUTPUT_SCHEMA_CHARS,
+  loadAnalysisConfig,
+  restoreAnalysisDefault,
+  saveAnalysisDefault,
+  updateAnalysisDraft,
+  type AnalysisDraft,
+  type AnalysisSuggestionId
+} from "./analysis-config.js";
 import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
 import { progressStepStates } from "./progress.js";
@@ -42,13 +53,13 @@ const copy = {
     mascotCueText: "I watch the frames, listen to the audio, and arrange every useful finding on the timeline.",
     flowVideo: "VIDEO",
     flowSignals: "AUDIO + FRAMES",
-    flowOutput: "DATA + FILES",
+    flowOutput: "STRUCTURED JSON",
     homeUnderstand: "Understand",
     homeUnderstandSub: "Summary, chapters, subtitles, and key moments",
     homeExtract: "Extract",
     homeExtractSub: "Structured JSON shaped to your exact request",
-    homeDeliver: "Deliver",
-    homeDeliverSub: "JSON, CSV, Markdown, SRT, and TXT outputs",
+    homeDeliver: "Reuse",
+    homeDeliverSub: "Keep a browser draft and a reusable default",
     newAnalysis: "NEW ANALYSIS",
     startOne: "Start an analysis",
     sourceLabel: "Video source",
@@ -60,22 +71,45 @@ const copy = {
     urlPlaceholder: "https://v.douyin.com/… or a direct video URL",
     urlHint: "Supports Douyin share links, Bilibili, YouTube and other public video URLs.",
     temporary: "Saved for permanent replay",
-    customExtract: "Advanced options",
-    customHint: "Open only when you need custom fields, instructions, or file formats",
-    advancedDescription: "Customize the analysis request, JSON shape, and downloadable file formats without changing the main page.",
-    advancedConfigured: "Configured",
-    advancedRequirement: "Custom request",
+    customExtract: "JSON editor",
+    customHint: "No fixed shape · AI decides from your request",
+    advancedDescription: "Review or edit the JSON shape Koma will return. Leave it empty to let AI decide during analysis.",
+    advancedConfigured: "JSON shape ready",
+    advancedRequirement: "Request added",
     cancelSettings: "Cancel",
-    applySettings: "Apply settings",
-    presetsLabel: "What do you need?",
-    presetsHint: "Optional · Skip this for a complete summary, chapters, and subtitles",
-    analysisRequirement: "Analysis requirement",
-    instructionPlaceholder: "Example: Extract every product mentioned, its price, and the first timestamp where it appears.",
-    outputShape: "Expected JSON shape (optional)",
+    applySettings: "Use this JSON",
+    presetsLabel: "What should this video become?",
+    presetsHint: "Describe the result in plain language. Koma can turn it into editable JSON.",
+    analysisRequirement: "Tell Koma what you need",
+    instructionPlaceholder: "For example: List every product, its price, supporting quote, and first appearance time.",
+    quickSuggestions: "Quick additions · choose any",
+    buildJson: "Create JSON with AI",
+    updateJson: "Regenerate JSON",
+    buildingJson: "Creating JSON…",
+    editJson: "Edit JSON",
+    defineJson: "Write JSON manually",
+    jsonReady: "A JSON shape is set",
+    jsonAutomatic: "AI will choose the JSON shape",
+    jsonAutomaticHint: "You can analyze now, or create the structure first.",
+    jsonReadyHint: "Review the generated fields before analysis.",
+    jsonValid: "Valid JSON",
+    jsonInvalid: "JSON needs attention",
+    jsonEmpty: "Empty · AI decides automatically",
+    formatJson: "Format",
+    clearJson: "Clear",
+    outputShape: "JSON shape",
     schemaPlaceholder: '{\n  "products": [\n    { "name": "string", "price": 0, "atMs": 0 }\n  ]\n}',
-    schemaHint: "Paste a JSON example or JSON Schema. Field names and nesting will be preserved.",
-    outputFiles: "Downloadable files (optional)",
-    outputFilesHint: "Generate complete text files from the same analysis. Select more than one if needed.",
+    schemaHint: "Use a JSON example or JSON Schema. Field names and nesting are preserved.",
+    schemaNeedsRequest: "Describe what you want first, or choose a quick addition.",
+    schemaUnavailable: "AI JSON creation needs a configured vision model. You can still edit JSON manually.",
+    schemaGenerateFailed: "Koma could not create the JSON shape. Your current configuration is unchanged.",
+    confirmReplaceSchema: "Replace the current JSON shape with a newly generated one?",
+    configAutosaved: "Draft saved in this browser",
+    saveDefault: "Set as default",
+    restoreDefault: "Restore default",
+    defaultSaved: "Default configuration saved",
+    defaultRestored: "Default configuration restored",
+    requestTooLong: "This request is too long. Shorten it before analysis.",
     invalidSchema: "The expected JSON shape is not valid JSON.",
     starting: "Starting…",
     start: "Analyze video",
@@ -147,10 +181,10 @@ const copy = {
     remaining: "Permanent replay · manage your own jobs from this browser",
     close: "Close",
     aboutTitle: "How to use Koma",
-    aboutText: "From a video to a replayable analysis and ready-to-use files.",
+    aboutText: "From a plain-language request to a replayable analysis and structured JSON.",
     aboutSteps: [
-      { title: "1 · Submit a video", text: "Upload a local video or paste a public URL. Pick an outcome if you need structured information, subtitles, or a report; otherwise just start the analysis." },
-      { title: "2 · Review the result", text: "Koma combines audio and key frames into a summary, chapters, tags, subtitles, structured data, and generated files. Click any timestamp, subtitle, chapter, tag, or key frame to return to that moment." },
+      { title: "1 · Describe the result", text: "Upload a local video or paste a public URL, then describe what you need. Quick additions can be combined, and AI can turn the full request into editable JSON." },
+      { title: "2 · Review the result", text: "Koma combines audio and key frames into a summary, chapters, tags, subtitles, and structured data. Click any timestamp, subtitle, chapter, tag, or key frame to return to that moment." },
       { title: "3 · Return from My jobs", text: "My jobs lists analyses submitted from this browser. You can reopen a running or completed job and permanently delete your own video, frames, result, and generated files." },
       { title: "4 · Share or administer", text: "Anyone with an unguessable replay link can view the result but cannot delete it. Administrators use Manage to configure providers and encrypted keys, inspect every job's request and result, and perform global deletion." }
     ],
@@ -192,13 +226,13 @@ const copy = {
     mascotCueText: "我会同时看画面、听声音，再把有用的内容按时间码整理好。",
     flowVideo: "视频",
     flowSignals: "声音 + 画面",
-    flowOutput: "数据 + 文件",
+    flowOutput: "结构化 JSON",
     homeUnderstand: "理解内容",
     homeUnderstandSub: "总结、章节、字幕与关键瞬间",
     homeExtract: "提取数据",
     homeExtractSub: "严格按要求返回结构化 JSON",
-    homeDeliver: "生成文件",
-    homeDeliverSub: "输出 JSON、CSV、Markdown、SRT、TXT",
+    homeDeliver: "复用配置",
+    homeDeliverSub: "浏览器自动保存草稿，也可以设为默认",
     newAnalysis: "NEW ANALYSIS",
     startOne: "开始一次分析",
     sourceLabel: "视频来源",
@@ -210,22 +244,45 @@ const copy = {
     urlPlaceholder: "https://v.douyin.com/… 或视频直链",
     urlHint: "支持抖音分享链接、B站、YouTube 等公开链接与视频直链。",
     temporary: "保存为可永久回看的任务",
-    customExtract: "高级设置",
-    customHint: "只有需要自定义字段、要求或文件格式时才打开",
-    advancedDescription: "在这里自定义分析要求、JSON 结构和输出文件，不会改变首页长度。",
-    advancedConfigured: "已配置",
-    advancedRequirement: "自定义要求",
+    customExtract: "JSON 编辑器",
+    customHint: "未固定结构 · 分析时由 AI 按要求整理",
+    advancedDescription: "检查或修改 Koma 将返回的 JSON 结构。留空时，分析过程中由 AI 自行决定。",
+    advancedConfigured: "JSON 结构已就绪",
+    advancedRequirement: "已填写要求",
     cancelSettings: "取消",
-    applySettings: "应用设置",
+    applySettings: "使用这份 JSON",
     presetsLabel: "你想得到什么？",
-    presetsHint: "可选 · 不选择也会生成完整总结、章节和字幕",
-    analysisRequirement: "分析要求",
-    instructionPlaceholder: "例如：提取视频中出现的所有商品、价格，以及首次出现的时间。",
-    outputShape: "期望 JSON 结构（可选）",
+    presetsHint: "直接说结果要包含什么，Koma 可以先帮你整理成可编辑的 JSON。",
+    analysisRequirement: "告诉 Koma 你想要什么",
+    instructionPlaceholder: "例如：列出所有商品、价格、相关原话，以及第一次出现的时间。",
+    quickSuggestions: "快速补充 · 可以多选",
+    buildJson: "让 AI 整理 JSON",
+    updateJson: "重新生成 JSON",
+    buildingJson: "正在整理 JSON…",
+    editJson: "编辑 JSON",
+    defineJson: "手动写 JSON",
+    jsonReady: "已经定义 JSON 结构",
+    jsonAutomatic: "将由 AI 自动整理 JSON",
+    jsonAutomaticHint: "可以直接开始分析，也可以先生成结构确认。",
+    jsonReadyHint: "分析前可以检查、修改字段和层级。",
+    jsonValid: "JSON 格式正确",
+    jsonInvalid: "JSON 需要修改",
+    jsonEmpty: "留空 · 分析时由 AI 决定",
+    formatJson: "格式化",
+    clearJson: "清空",
+    outputShape: "JSON 结构",
     schemaPlaceholder: '{\n  "products": [\n    { "name": "string", "price": 0, "atMs": 0 }\n  ]\n}',
-    schemaHint: "可粘贴 JSON 示例或 JSON Schema；字段名和嵌套结构会被保留。",
-    outputFiles: "输出文件（可选）",
-    outputFilesHint: "基于同一次分析生成完整文本文件，可以多选。",
+    schemaHint: "可以使用 JSON 示例或 JSON Schema；字段名和嵌套层级会被保留。",
+    schemaNeedsRequest: "先说说你想要什么，或者选择一个快速补充。",
+    schemaUnavailable: "AI 整理 JSON 需要先配置视觉模型；你仍然可以手动编辑 JSON。",
+    schemaGenerateFailed: "这次没有整理出可用的 JSON，当前配置没有被覆盖。",
+    confirmReplaceSchema: "要用新生成的内容替换当前 JSON 结构吗？",
+    configAutosaved: "草稿已自动保存在这个浏览器",
+    saveDefault: "设为默认",
+    restoreDefault: "恢复默认",
+    defaultSaved: "默认配置已保存",
+    defaultRestored: "已恢复默认配置",
+    requestTooLong: "这段要求太长了，精简后再开始分析。",
     invalidSchema: "期望 JSON 结构不是有效 JSON。",
     starting: "正在放入…",
     start: "开始分析",
@@ -297,10 +354,10 @@ const copy = {
     remaining: "永久回看 · 可在这个浏览器管理自己的任务",
     close: "关闭",
     aboutTitle: "如何使用 Koma",
-    aboutText: "从一段视频，得到可回看、可定位、可下载的完整分析结果。",
+    aboutText: "用一句话描述要求，得到可回看、可定位的分析结果和结构化 JSON。",
     aboutSteps: [
-      { title: "1 · 提交视频", text: "上传本地视频或粘贴公开视频地址。需要信息、字幕或报告时可以选一个结果类型；只想快速理解内容则直接开始分析。" },
-      { title: "2 · 查看分析结果", text: "Koma 会结合声音和关键帧生成总结、章节、标签、字幕、结构化数据与文件。点击时间、字幕、章节、标签或关键帧，都能跳回视频对应位置。" },
+      { title: "1 · 说清楚想要什么", text: "上传本地视频或粘贴公开视频地址，再直接描述结果要包含什么。快速补充可以同时选择，也可以让 AI 先整理成可编辑的 JSON。" },
+      { title: "2 · 查看分析结果", text: "Koma 会结合声音和关键帧生成总结、章节、标签、字幕与结构化数据。点击时间、字幕、章节、标签或关键帧，都能跳回视频对应位置。" },
       { title: "3 · 从“我的任务”回来", text: "“我的任务”会列出这个浏览器提交的分析。可以重新打开执行中或已完成的任务，也可以永久删除自己的原视频、关键帧、结果和生成文件。" },
       { title: "4 · 分享与管理", text: "拿到不可猜回看链接的人可以查看结果，但不能删除。管理员从“管理”进入后台，配置 Provider 和加密 Key，查看全部任务的要求与结果，并执行全局删除。" }
     ],
@@ -320,40 +377,49 @@ interface Artifact { id: string; name: string; format: ArtifactFormat; mimeType:
 interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; extractedData?: unknown; artifacts?: Artifact[]; }
 interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; updatedAt: number; completedAt?: number | null; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; owned?: boolean; }
 interface JobHistoryItem { id: string; source: "upload" | "url"; title: string; status: Job["status"]; progress: JobProgress; createdAt: number; updatedAt: number; completedAt?: number | null; mediaAvailable: boolean; error: string | null; }
-interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number }; }
-interface AnalysisPreset { id: "extract" | "subtitles" | "report"; label: string; description: string; instruction: string; outputSchema?: unknown; formats: ArtifactFormat[]; }
+interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number }; configured?: { vision?: boolean; analysis?: boolean }; }
+interface AnalysisSuggestion { id: AnalysisSuggestionId; label: string; description: string; instruction: string; }
 
-function analysisPresets(language: Language): AnalysisPreset[] {
+function analysisSuggestions(language: Language): AnalysisSuggestion[] {
   if (language === "zh") return [
     {
-      id: "extract", label: "提取信息", description: "人物、商品、数字与时间点", formats: ["json", "csv"],
-      instruction: "提取视频中出现的关键人物、组织、商品、数字和重要观点，并记录每项首次出现的时间。只返回视频中有明确依据的信息。",
-      outputSchema: { items: [{ type: "string", name: "string", value: "string", evidence: "string", atMs: 0 }] }
+      id: "extract", label: "提取信息", description: "人物、商品、数字与时间点",
+      instruction: "提取关键人物、组织、商品、数字和重要观点，附上依据与首次出现的时间；只记录视频中有明确依据的信息。"
     },
     {
-      id: "subtitles", label: "双语字幕", description: "可下载的中英文字幕", formats: ["srt"],
-      instruction: "生成两份完整 SRT 字幕：zh-CN.srt 使用简体中文，en-US.srt 使用自然英文。保留准确时间轴，不遗漏有意义的口语内容。"
+      id: "subtitles", label: "双语内容", description: "原文、中文与准确时间轴",
+      instruction: "在 JSON 中整理完整的双语内容：保留原文、自然简体中文翻译、开始和结束时间，不遗漏有意义的口语。"
     },
     {
-      id: "report", label: "整理报告", description: "摘要、结论与行动项", formats: ["markdown"],
-      instruction: "生成一份结构清晰的中文 Markdown 报告，包含执行摘要、核心观点、关键证据及时间点、结论和可执行行动项。"
+      id: "report", label: "整理报告", description: "摘要、证据、结论与行动项",
+      instruction: "在 JSON 中整理执行摘要、核心观点、带时间点的关键证据、结论和可执行行动项。"
     }
   ];
   return [
     {
-      id: "extract", label: "Extract information", description: "People, products, numbers, and moments", formats: ["json", "csv"],
-      instruction: "Extract the key people, organizations, products, numbers, and claims in the video, including the first timestamp for each item. Include only information supported by the video.",
-      outputSchema: { items: [{ type: "string", name: "string", value: "string", evidence: "string", atMs: 0 }] }
+      id: "extract", label: "Extract facts", description: "People, products, numbers, and moments",
+      instruction: "Extract key people, organizations, products, numbers, and claims with supporting evidence and the first timestamp for each; include only information supported by the video."
     },
     {
-      id: "subtitles", label: "Bilingual subtitles", description: "Download Chinese and English captions", formats: ["srt"],
-      instruction: "Generate two complete SRT subtitle files: zh-CN.srt in Simplified Chinese and en-US.srt in natural English. Preserve accurate timing and all meaningful speech."
+      id: "subtitles", label: "Bilingual content", description: "Original text, Chinese, and exact timing",
+      instruction: "Structure complete bilingual content in JSON with the original speech, natural Simplified Chinese, start and end times, without omitting meaningful speech."
     },
     {
-      id: "report", label: "Organized report", description: "Summary, findings, and actions", formats: ["markdown"],
-      instruction: "Create a well-structured English Markdown report with an executive summary, key findings, timestamped evidence, conclusions, and actionable next steps."
+      id: "report", label: "Organize a report", description: "Summary, evidence, conclusions, and actions",
+      instruction: "Structure an executive summary, key findings, timestamped evidence, conclusions, and actionable next steps in JSON."
     }
   ];
+}
+
+function effectiveAnalysisInstruction(instruction: string, suggestionIds: string[], language: Language): string {
+  const selected = new Set(suggestionIds);
+  return [instruction.trim(), ...analysisSuggestions(language).filter((item) => selected.has(item.id)).map((item) => item.instruction)]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function isAnalysisSuggestionId(value: string): value is AnalysisSuggestionId {
+  return ANALYSIS_SUGGESTION_IDS.some((candidate) => candidate === value);
 }
 
 function parseOutputSchema(value: string, errorMessage: string): unknown {
@@ -396,6 +462,7 @@ function Brand({ onClick, label }: { onClick?: () => void; label?: string }) {
 function App() {
   const [language, setLanguage] = useState<Language>(() => window.localStorage.getItem("koma-language") === "zh" ? "zh" : "en");
   const t = copy[language];
+  const [initialAnalysisConfig] = useState(() => loadAnalysisConfig(window.localStorage));
   const [mode, setMode] = useState<"upload" | "url">("url");
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
@@ -407,15 +474,21 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [instruction, setInstruction] = useState("");
-  const [outputSchema, setOutputSchema] = useState("");
-  const [artifactFormats, setArtifactFormats] = useState<ArtifactFormat[]>([]);
-  const [activePreset, setActivePreset] = useState<AnalysisPreset["id"] | null>(null);
+  const [editorInitialSchema, setEditorInitialSchema] = useState(initialAnalysisConfig.draft.outputSchema);
+  const [instruction, setInstruction] = useState(initialAnalysisConfig.draft.instruction);
+  const [suggestionIds, setSuggestionIds] = useState<AnalysisSuggestionId[]>(() => initialAnalysisConfig.draft.suggestionIds.filter(isAnalysisSuggestionId));
+  const [outputSchema, setOutputSchema] = useState(initialAnalysisConfig.draft.outputSchema);
+  const [defaultConfig, setDefaultConfig] = useState<AnalysisDraft | undefined>(initialAnalysisConfig.defaultConfig);
+  const [generatingSchema, setGeneratingSchema] = useState(false);
+  const [schemaActionError, setSchemaActionError] = useState("");
+  const [configNotice, setConfigNotice] = useState("");
   const [serviceInfo, setServiceInfo] = useState<ServiceInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const advancedTriggerRef = useRef<HTMLButtonElement>(null);
+  const schemaGenerationAbortRef = useRef<AbortController | null>(null);
+  const schemaGenerationRequestRef = useRef(0);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const hasResult = job?.status === "done" && job.result;
   const progress = job?.progress?.percent ?? 0;
@@ -423,9 +496,11 @@ function App() {
   const maxMegabytes = Math.max(1, Math.round((serviceInfo?.limits?.maxUploadBytes || 500 * 1024 * 1024) / 1024 / 1024));
   const fileHint = language === "zh" ? `MP4、MOV、WebM · 最长 ${maxMinutes} 分钟 / ${maxMegabytes} MB` : `MP4, MOV, WebM · up to ${maxMinutes} min / ${maxMegabytes} MB`;
   const sourceError = error === t.missingFile || error === t.missingUrl;
-  const hasAdvancedSettings = Boolean(instruction.trim() || outputSchema.trim() || artifactFormats.length);
-  const advancedSummaryParts = Array.from(new Set([instruction.trim() ? t.advancedRequirement : "", outputSchema.trim() ? "JSON" : "", ...artifactFormats.map((format) => format === "markdown" ? "MD" : format.toUpperCase())].filter(Boolean)));
-  const advancedSummary = hasAdvancedSettings ? `${t.advancedConfigured} · ${advancedSummaryParts.join(" + ")}` : t.customHint;
+  const composedInstruction = effectiveAnalysisInstruction(instruction, suggestionIds, language);
+  const suggestionInstructionLength = effectiveAnalysisInstruction("", suggestionIds, language).length;
+  const instructionLimit = Math.max(0, MAX_ANALYSIS_INSTRUCTION_CHARS - suggestionInstructionLength - (suggestionInstructionLength ? 2 : 0));
+  const hasOutputSchema = Boolean(outputSchema.trim());
+  const currentAnalysisDraft: AnalysisDraft = { instruction, suggestionIds, outputSchema };
 
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
@@ -434,13 +509,13 @@ function App() {
   }, [language]);
 
   useEffect(() => {
-    if (!activePreset) return;
-    const preset = analysisPresets(language).find((item) => item.id === activePreset);
-    if (!preset) return;
-    setInstruction(preset.instruction);
-    setOutputSchema(preset.outputSchema === undefined ? "" : JSON.stringify(preset.outputSchema, null, 2));
-    setArtifactFormats([...preset.formats]);
-  }, [language, activePreset]);
+    updateAnalysisDraft(window.localStorage, { instruction, suggestionIds, outputSchema });
+  }, [instruction, suggestionIds, outputSchema]);
+
+  useEffect(() => () => {
+    schemaGenerationRequestRef.current += 1;
+    schemaGenerationAbortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -501,8 +576,11 @@ function App() {
   }, [job?.id, job?.status, language, t.jobMissing]);
 
   async function startAnalysis(event?: FormEvent) {
-    event?.preventDefault(); setBusy(true); setError(""); setJob(null); setUploadPercent(null);
+    event?.preventDefault();
+    if (generatingSchema) return;
+    setBusy(true); setError(""); setJob(null); setUploadPercent(null);
     try {
+      if (composedInstruction.length > MAX_ANALYSIS_INSTRUCTION_CHARS) throw new Error(t.requestTooLong);
       const parsedOutputSchema = parseOutputSchema(outputSchema, t.invalidSchema);
       if (mode === "upload") {
         if (!file) throw new Error(t.missingFile);
@@ -512,7 +590,7 @@ function App() {
         window.history.replaceState({}, "", `/jobs/${jobId}`);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
-        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: instruction.trim() || undefined, outputSchema: parsedOutputSchema, artifactFormats }) });
+        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: composedInstruction || undefined, outputSchema: parsedOutputSchema }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
         if (!response.ok) throw new Error(body.error || t.startFailed);
         const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
@@ -521,7 +599,7 @@ function App() {
       }
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : String(submitError);
-      const clientMessage = message === t.missingFile || message === t.missingUrl || message === t.invalidSchema;
+      const clientMessage = message === t.missingFile || message === t.missingUrl || message === t.invalidSchema || message === t.requestTooLong;
       setError(clientMessage ? message : translateServerError(message, language));
       if (message === t.missingUrl) urlInputRef.current?.focus();
       if (message === t.missingFile) dropZoneRef.current?.focus();
@@ -546,9 +624,8 @@ function App() {
       const formData = new FormData();
       // @fastify/multipart exposes fields already received when request.file() resolves,
       // so append extraction fields before the video part.
-      if (instruction.trim()) formData.append("instruction", instruction.trim());
+      if (composedInstruction) formData.append("instruction", composedInstruction);
       if (parsedOutputSchema !== undefined) formData.append("outputSchema", JSON.stringify(parsedOutputSchema));
-      if (artifactFormats.length) formData.append("artifactFormats", JSON.stringify(artifactFormats));
       formData.append("video", video);
       xhr.send(formData);
     });
@@ -596,19 +673,90 @@ function App() {
   // 点 Logo 回到首页只离开当前视图；永久任务继续处理并保留。
   function goHome() { leaveJob(); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
-  function applyPreset(preset: AnalysisPreset) {
-    setInstruction(preset.instruction);
-    setOutputSchema(preset.outputSchema === undefined ? "" : JSON.stringify(preset.outputSchema, null, 2));
-    setArtifactFormats([...preset.formats]);
-    setActivePreset(preset.id);
-    setError("");
+
+  function toggleSuggestion(id: AnalysisSuggestionId) {
+    setSuggestionIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setSchemaActionError("");
+    setConfigNotice("");
+  }
+
+  async function generateOutputSchema() {
+    setSchemaActionError("");
+    setConfigNotice("");
+    if (!composedInstruction) {
+      setSchemaActionError(t.schemaNeedsRequest);
+      return;
+    }
+    if (composedInstruction.length > MAX_ANALYSIS_INSTRUCTION_CHARS) {
+      setSchemaActionError(t.requestTooLong);
+      return;
+    }
+    if (serviceInfo?.configured?.analysis === false) {
+      setSchemaActionError(t.schemaUnavailable);
+      return;
+    }
+    if (hasOutputSchema && !window.confirm(t.confirmReplaceSchema)) return;
+    schemaGenerationAbortRef.current?.abort();
+    const controller = new AbortController();
+    const requestId = schemaGenerationRequestRef.current + 1;
+    schemaGenerationRequestRef.current = requestId;
+    schemaGenerationAbortRef.current = controller;
+    setGeneratingSchema(true);
+    try {
+      const response = await fetch("/api/analysis-spec/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ instruction: composedInstruction, lang: language }),
+        signal: controller.signal
+      });
+      const body = await response.json().catch(() => ({})) as { outputSchema?: unknown; error?: string };
+      if (!response.ok) {
+        if (response.status === 503) throw new Error(t.schemaUnavailable);
+        if (response.status === 400 || response.status === 429) throw new Error(body.error || t.schemaGenerateFailed);
+        throw new Error(t.schemaGenerateFailed);
+      }
+      const serialized = JSON.stringify(body.outputSchema, null, 2);
+      if (!serialized) throw new Error(t.schemaGenerateFailed);
+      parseOutputSchema(serialized, t.schemaGenerateFailed);
+      if (schemaGenerationRequestRef.current !== requestId) return;
+      setEditorInitialSchema(serialized);
+      setShowAdvancedSettings(true);
+    } catch (cause) {
+      if (controller.signal.aborted || schemaGenerationRequestRef.current !== requestId) return;
+      const message = cause instanceof Error ? cause.message : t.schemaGenerateFailed;
+      setSchemaActionError(message === t.schemaUnavailable || message === t.schemaGenerateFailed ? message : translateServerError(message, language) || t.schemaGenerateFailed);
+    } finally {
+      if (schemaGenerationRequestRef.current === requestId) {
+        schemaGenerationAbortRef.current = null;
+        setGeneratingSchema(false);
+      }
+    }
+  }
+
+  function saveCurrentAsDefault() {
+    updateAnalysisDraft(window.localStorage, currentAnalysisDraft);
+    const stored = saveAnalysisDefault(window.localStorage, currentAnalysisDraft);
+    setDefaultConfig(stored.defaultConfig);
+    setConfigNotice(t.defaultSaved);
+  }
+
+  function restoreSavedDefault() {
+    const stored = restoreAnalysisDefault(window.localStorage);
+    if (!stored.defaultConfig) return;
+    setInstruction(stored.draft.instruction);
+    setSuggestionIds(stored.draft.suggestionIds.filter(isAnalysisSuggestionId));
+    setOutputSchema(stored.draft.outputSchema);
+    setDefaultConfig(stored.defaultConfig);
+    setSchemaActionError("");
+    setConfigNotice(t.defaultRestored);
   }
 
   return <div className="app-shell">
     <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
-      <button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
-      <button className="header-button" type="button" onClick={() => setShowHistory(true)}><Glyph name="clock" size={16} />{t.history}</button>
-      <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" aria-label={`${t.admin} / ${t.help}`} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button></div>}</div>
+      <button className="header-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
+      <button className="header-button" type="button" disabled={generatingSchema} onClick={() => setShowHistory(true)}><Glyph name="clock" size={16} />{t.history}</button>
+      <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" disabled={generatingSchema} aria-label={`${t.admin} / ${t.help}`} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button></div>}</div>
     </div></div></header>
 
     <main className="main-shell">
@@ -626,7 +774,7 @@ function App() {
           </div>
         </div>
 
-        <form className="capture-card" onSubmit={startAnalysis} aria-busy={busy} aria-label={t.startOne}>
+        <form className="capture-card" onSubmit={startAnalysis} aria-busy={busy || generatingSchema} aria-label={t.startOne}>
           <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><img src="/koma-icon-64.png" alt="" /></header>
           <div className="workbench-source">
             <h3 id="video-source-heading" className="workbench-section-label">{t.sourceLabel}</h3>
@@ -643,12 +791,28 @@ function App() {
           <section className="workbench-analysis" aria-labelledby="analysis-mode-heading">
             <h3 id="analysis-mode-heading" className="workbench-section-label">{t.presetsLabel}</h3>
             <p className="workbench-section-hint">{t.presetsHint}</p>
-            <div className="preset-panel"><div className="preset-list">{analysisPresets(language).map((preset) => <button key={preset.id} type="button" className={activePreset === preset.id ? "selected" : ""} aria-pressed={activePreset === preset.id} onClick={() => applyPreset(preset)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><em>{preset.formats.map((format) => format === "markdown" ? "MD" : format.toUpperCase()).join(" + ")}</em></button>)}</div></div>
-            <div className={`custom-extraction ${showAdvancedSettings ? "open" : ""} ${hasAdvancedSettings ? "configured" : ""}`}>
-              <button ref={advancedTriggerRef} className="custom-extraction-toggle" type="button" aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => setShowAdvancedSettings(true)}><span><Glyph name="spark" size={15} /><strong>{t.customExtract}</strong><small>{advancedSummary}</small></span><i aria-hidden="true">→</i></button>
+            <label className="analysis-request-field">
+              <span className="analysis-request-label"><strong>{t.analysisRequirement}</strong><small className={instruction.length > instructionLimit ? "over-limit" : ""}>{instruction.length}/{instructionLimit}</small></span>
+              <textarea value={instruction} disabled={generatingSchema} onChange={(event) => { setInstruction(event.target.value); setSchemaActionError(""); setConfigNotice(""); }} maxLength={instructionLimit} rows={4} placeholder={t.instructionPlaceholder} />
+            </label>
+            <div className="analysis-suggestions">
+              <span>{t.quickSuggestions}</span>
+              <div>{analysisSuggestions(language).map((suggestion) => {
+                const selected = suggestionIds.includes(suggestion.id);
+                return <button key={suggestion.id} type="button" disabled={generatingSchema} className={selected ? "selected" : ""} aria-pressed={selected} title={suggestion.description} onClick={() => toggleSuggestion(suggestion.id)}><i aria-hidden="true">{selected ? "✓" : "+"}</i>{suggestion.label}</button>;
+              })}</div>
             </div>
+            <div className={`json-workflow ${hasOutputSchema ? "configured" : ""}`}>
+              <div className="json-workflow-status"><span aria-hidden="true" /><div><strong>{hasOutputSchema ? t.jsonReady : t.jsonAutomatic}</strong><small>{hasOutputSchema ? t.jsonReadyHint : t.jsonAutomaticHint}</small></div></div>
+              <div className="json-workflow-actions">
+                <button className="json-ai-button" type="button" disabled={generatingSchema} onClick={generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.buildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
+                <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
+              </div>
+            </div>
+            {schemaActionError && <p className="analysis-config-error" role="alert">{schemaActionError}</p>}
+            <div className="config-memory"><span><i aria-hidden="true" />{configNotice || t.configAutosaved}</span><div><button type="button" disabled={generatingSchema} onClick={saveCurrentAsDefault}>{t.saveDefault}</button><button type="button" disabled={generatingSchema || !defaultConfig} onClick={restoreSavedDefault}>{t.restoreDefault}</button></div></div>
           </section>
-          <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy}>{busy ? (uploadPercent !== null ? `${t.uploading} ${uploadPercent}%` : t.starting) : t.start}<Glyph name="arrow" size={17} /></button></div>
+          <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy || generatingSchema}>{busy ? (uploadPercent !== null ? `${t.uploading} ${uploadPercent}%` : t.starting) : t.start}<Glyph name="arrow" size={17} /></button></div>
           {uploadPercent !== null && <div className="upload-track" aria-label={`${t.uploadProgress}: ${uploadPercent}%`}><span style={{ width: `${uploadPercent}%` }} /></div>}
           {error && !sourceError && <p id="analysis-form-error" className="form-error" role="alert">{error}</p>}
         </form>
@@ -656,14 +820,11 @@ function App() {
       {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} language={language} />}
       {hasResult && <ResultView job={job} onRestart={restartAnalysis} onDelete={deleteOwnedJob} language={language} />}
     </main>
-    {showAdvancedSettings && <AdvancedSettingsDialog language={language} instruction={instruction} outputSchema={outputSchema} artifactFormats={artifactFormats} returnFocusRef={advancedTriggerRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
-      const formatsChanged = next.artifactFormats.length !== artifactFormats.length || next.artifactFormats.some((format, index) => format !== artifactFormats[index]);
-      const changed = next.instruction !== instruction || next.outputSchema !== outputSchema || formatsChanged;
-      setInstruction(next.instruction);
+    {showAdvancedSettings && <AdvancedSettingsDialog language={language} outputSchema={editorInitialSchema} returnFocusRef={advancedTriggerRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
       setOutputSchema(next.outputSchema);
-      setArtifactFormats(next.artifactFormats);
-      if (changed) setActivePreset(null);
       setShowAdvancedSettings(false);
+      setSchemaActionError("");
+      setConfigNotice("");
       setError("");
     }} />}
     {showHistory && <HistoryModal onClose={() => setShowHistory(false)} onOpen={openHistoryJob} onDelete={deleteOwnedJob} language={language} />}
@@ -791,25 +952,18 @@ function formatBytes(bytes: number): string {
 }
 
 interface AdvancedSettingsValue {
-  instruction: string;
   outputSchema: string;
-  artifactFormats: ArtifactFormat[];
 }
 
-function AdvancedSettingsDialog({ language, instruction, outputSchema, artifactFormats, returnFocusRef, onCancel, onApply }: {
+function AdvancedSettingsDialog({ language, outputSchema, returnFocusRef, onCancel, onApply }: {
   language: Language;
-  instruction: string;
   outputSchema: string;
-  artifactFormats: ArtifactFormat[];
   returnFocusRef: RefObject<HTMLButtonElement | null>;
   onCancel: () => void;
   onApply: (value: AdvancedSettingsValue) => void;
 }) {
   const t = copy[language];
-  const [draftInstruction, setDraftInstruction] = useState(instruction);
   const [draftSchema, setDraftSchema] = useState(outputSchema);
-  const [draftFormats, setDraftFormats] = useState<ArtifactFormat[]>([...artifactFormats]);
-  const [dialogError, setDialogError] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const schemaRef = useRef<HTMLTextAreaElement>(null);
@@ -865,34 +1019,41 @@ function AdvancedSettingsDialog({ language, instruction, outputSchema, artifactF
     };
   }, [returnFocusRef]);
 
-  function toggleDraftFormat(format: ArtifactFormat) {
-    setDraftFormats((current) => current.includes(format) ? current.filter((item) => item !== format) : [...current, format]);
+  let dialogError = "";
+  if (draftSchema.trim()) {
+    try { parseOutputSchema(draftSchema, t.invalidSchema); }
+    catch { dialogError = t.invalidSchema; }
+  }
+
+  function formatDraftSchema() {
+    if (!draftSchema.trim() || dialogError) {
+      schemaRef.current?.focus();
+      return;
+    }
+    const parsed = parseOutputSchema(draftSchema, t.invalidSchema);
+    setDraftSchema(JSON.stringify(parsed, null, 2));
   }
 
   function applySettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    try {
-      parseOutputSchema(draftSchema, t.invalidSchema);
-    } catch (cause) {
-      setDialogError(cause instanceof Error ? cause.message : t.invalidSchema);
+    if (dialogError) {
       schemaRef.current?.focus();
       return;
     }
-    onApply({ instruction: draftInstruction, outputSchema: draftSchema, artifactFormats: [...draftFormats] });
+    onApply({ outputSchema: draftSchema });
   }
 
   return <dialog ref={dialogRef} className="advanced-dialog" aria-modal="true" aria-labelledby="advanced-dialog-title" aria-describedby="advanced-dialog-description" onCancel={(event) => { event.preventDefault(); onCancelRef.current(); }} onClick={(event) => { if (event.target === event.currentTarget) onCancelRef.current(); }}>
     <form className="advanced-dialog-shell" onSubmit={applySettings}>
       <header className="advanced-dialog-head">
-        <div><span className="page-label">KOMA OPTIONS</span><h2 ref={titleRef} id="advanced-dialog-title" tabIndex={-1}>{t.customExtract}</h2><p id="advanced-dialog-description">{t.advancedDescription}</p></div>
+        <div><span className="page-label">KOMA JSON</span><h2 ref={titleRef} id="advanced-dialog-title" tabIndex={-1}>{t.customExtract}</h2><p id="advanced-dialog-description">{t.advancedDescription}</p></div>
         <button className="advanced-dialog-close" type="button" onClick={onCancel} aria-label={t.close}>×</button>
       </header>
       <div className="advanced-dialog-body custom-extraction-fields">
-        <label><span>{t.analysisRequirement}</span><textarea value={draftInstruction} onChange={(event) => setDraftInstruction(event.target.value)} maxLength={4000} rows={4} placeholder={t.instructionPlaceholder} /></label>
-        <label><span>{t.outputShape}</span><textarea ref={schemaRef} className="schema-input" value={draftSchema} onChange={(event) => { setDraftSchema(event.target.value); setDialogError(""); }} maxLength={12000} rows={8} spellCheck={false} placeholder={t.schemaPlaceholder} aria-invalid={Boolean(dialogError)} aria-describedby={dialogError ? "advanced-schema-error" : "advanced-schema-hint"} /><small id="advanced-schema-hint">{t.schemaHint}</small>{dialogError && <small id="advanced-schema-error" className="advanced-dialog-error" role="alert">{dialogError}</small>}</label>
-        <fieldset className="artifact-format-field"><legend>{t.outputFiles}</legend><small>{t.outputFilesHint}</small><div className="artifact-format-list">{(["json", "csv", "markdown", "srt", "text"] as ArtifactFormat[]).map((format) => <button key={format} type="button" className={draftFormats.includes(format) ? "selected" : ""} aria-pressed={draftFormats.includes(format)} onClick={() => toggleDraftFormat(format)}>{format === "markdown" ? "Markdown" : format.toUpperCase()}</button>)}</div></fieldset>
+        <div className={`json-editor-status ${!draftSchema.trim() ? "empty" : dialogError ? "invalid" : "valid"}`} role="status"><span><i aria-hidden="true" />{!draftSchema.trim() ? t.jsonEmpty : dialogError ? t.jsonInvalid : t.jsonValid}</span><div><button type="button" disabled={!draftSchema.trim() || Boolean(dialogError)} onClick={formatDraftSchema}>{t.formatJson}</button><button type="button" disabled={!draftSchema} onClick={() => { setDraftSchema(""); schemaRef.current?.focus(); }}>{t.clearJson}</button></div></div>
+        <label><span>{t.outputShape}</span><textarea ref={schemaRef} className="schema-input" value={draftSchema} onChange={(event) => setDraftSchema(event.target.value)} maxLength={MAX_OUTPUT_SCHEMA_CHARS} rows={16} spellCheck={false} autoCapitalize="off" autoCorrect="off" placeholder={t.schemaPlaceholder} aria-invalid={Boolean(dialogError)} aria-describedby={dialogError ? "advanced-schema-error" : "advanced-schema-hint"} /><small id="advanced-schema-hint">{t.schemaHint}</small>{dialogError && <small id="advanced-schema-error" className="advanced-dialog-error" role="alert">{dialogError}</small>}</label>
       </div>
-      <footer className="advanced-dialog-foot"><button className="advanced-dialog-cancel" type="button" onClick={onCancel}>{t.cancelSettings}</button><button className="primary-button" type="submit">{t.applySettings}<Glyph name="arrow" size={17} /></button></footer>
+      <footer className="advanced-dialog-foot"><button className="advanced-dialog-cancel" type="button" onClick={onCancel}>{t.cancelSettings}</button><button className="primary-button" type="submit" disabled={Boolean(dialogError)}>{t.applySettings}<Glyph name="arrow" size={17} /></button></footer>
     </form>
   </dialog>;
 }
