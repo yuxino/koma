@@ -1,35 +1,23 @@
 <div align="center">
   <img src="public/koma-readme-icon.png" width="112" alt="Koma icon">
   <h1>Koma</h1>
-  <p>AI-powered video understanding.</p>
-  <p>
-    <a href="README.zh-CN.md">简体中文</a>
-  </p>
+  <p>Turn video into useful data.</p>
+  <p><a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Upload a video or paste a URL. Koma extracts key frames, transcribes speech, and uses AI to explain the video — chapter by chapter — on a single jumpable timeline.
+Koma turns a video into a replayable result with summaries, chapters, subtitles, key frames, structured data, and downloadable files.
 
 ## Features
 
-- **Video input** — upload local videos or analyze public URLs (Douyin, Bilibili, YouTube, and more via yt-dlp).
-- **Chapter summary** — the AI splits the video into timed chapters, each with a title and a few sentences explaining what happens there. Click any chapter to jump straight to it.
-- **Key-frame gallery** — scene-change detection picks the frames that matter, with uniform sampling to cover the whole video; larger cards show timestamps and open into a navigable full-size preview.
-- **Subtitles** — timestamped transcription with optional speaker diarization (falls back gracefully if it fails).
-- **Tags** — AI-generated content tags with timestamps that jump to the first appearance.
-- **Timeline navigation** — jump from any chapter, tag, subtitle, or frame straight to that moment in the video.
-- **Language-aware output** — titles, summaries, chapters, tags, and captions follow the UI language (English or Chinese).
-- **Custom extraction** — provide a natural-language requirement and optional JSON example or JSON Schema; copy/download the result or retrieve the raw JSON through the API.
-- **File artifacts** — generate ready-to-download JSON, CSV, Markdown, SRT, or TXT files from the same request; language and contents follow the analysis instruction.
-- **Multiple AI backends** — presets for DashScope, OpenAI, Gemini, OpenRouter, and Groq, plus any OpenAI-compatible vision or transcription endpoint.
-- **Protected admin console** — manage active ASR/vision providers, encrypted API keys, persistent jobs, and stored assets at `/admin`; running jobs keep an immutable provider snapshot.
-- **Permanent replay** — every submission receives an unguessable `/jobs/<id>` link. SQLite/MySQL stores the job and complete result; local storage or Aliyun OSS stores the source video, frames, and generated files.
-- **Personal job history** — no account required. An HttpOnly anonymous browser identity lists jobs submitted from that browser and lets their owner delete them.
-- **Smart downloads** — share links are resolved before downloading; overlong videos are rejected up front instead of after the whole file arrives.
-- **Safe deletion boundary** — a shared replay link alone cannot delete a job. Owners and administrators can permanently remove the database record and the entire job prefix from storage.
+- Upload a local video or paste a Douyin/Bilibili link. Install `yt-dlp` for YouTube and more sites.
+- Combine audio and key frames into summaries, chapters, tags, subtitles, and scene captions.
+- Jump from any chapter, tag, subtitle, or frame to the matching moment.
+- Extract custom JSON and export JSON, CSV, Markdown, SRT, or TXT.
+- Save replayable jobs, manage your own history, and configure providers from `/admin`.
 
 ## Quick start
 
-Requires Node.js 22.13+ and FFmpeg (bundled via `ffmpeg-static`).
+Requires Node.js 22.13+. FFmpeg and ffprobe are bundled.
 
 ```bash
 npm install
@@ -38,31 +26,21 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-Without any API keys, Koma runs the default summary flow with demo data; custom extraction requires a real vision model. Providers can be mixed: use DashScope for both stages, or pair Groq Whisper with OpenRouter's free vision router for a low-cost public demo (see [Configuration](docs/CONFIGURATION.md)).
+Without API keys, Koma runs in mock mode. Custom extraction and generated files require a real vision provider. See [Configuration](docs/CONFIGURATION.md).
 
 ## CLI
 
-Analyze a video or URL from the terminal:
-
 ```bash
-node dist-server/cli.js <video path or URL> [--lang en|zh] [--json out.json] [--frames-dir dir]
-```
-
-Extract requested data and emit only the target JSON:
-
-```bash
-node dist-server/cli.js demo.mp4 \
-  --instruction "Extract every product, price, and first appearance time" \
-  --schema product-shape.json \
-  --artifact csv \
-  --artifacts-dir outputs \
-  --extraction-only
+npm run build
+node dist-server/cli.js demo.mp4 --lang en --json result.json
+node dist-server/cli.js --help
 ```
 
 ## Docs
 
-- [Configuration](docs/CONFIGURATION.md) — environment variables
-- [Administration](docs/ADMIN.md) — protected provider settings, database setup, and secret handling
-- [HTTP API](docs/API.md) — submit jobs and retrieve structured results
-- [Deployment](DEPLOY.md) — server setup with PM2 + nginx
-- [Design decisions](docs/decisions/)
+- [Configuration](docs/CONFIGURATION.md)
+- [Administration](docs/ADMIN.md)
+- [HTTP API](docs/API.md)
+- [Deployment](DEPLOY.md)
+
+<sub>Unofficial, non-commercial fan project. Not affiliated with or endorsed by CAPCOM.</sub>
