@@ -1,54 +1,78 @@
 # Koma design system
 
-Koma uses a Hallmark-inspired **light paper workbench** system: the product interface is the visual center, not a SaaS marketing shell.
+状态：**已采用**。Koma 的规范性视觉方向是 **逐帧研究室（Frame Atelier）**。本文件定义新建与重构界面必须遵守的设计系统，不记录代码完成度。详细实现设计见 [`docs/plans/2026-08-24-frame-atelier-design.md`](docs/plans/2026-08-24-frame-atelier-design.md)。
 
-## Design intent
+## 目的
 
-- Audience: people turning video into summaries, structured data, subtitles, reports, and reusable files.
-- Primary job: submit a video, specify the extraction, and inspect/reopen the result with minimal ceremony.
-- Tone: technical, restrained, calm, operator-focused.
-- Macrostructure: asymmetric workbench. A compact explanatory rail sits beside a dominant analysis panel.
+Koma 帮助用户把视频整理为总结、章节、关键帧、字幕、结构化数据和可下载文件。界面应像安静、可信的影像整理工作台：先完成任务，再表达品牌；可爱，但不幼稚；专业，但不冰冷。
 
-## Tokens
+## 视觉概念
 
-The structural system lives in `src/client/hallmark.css`; the active light palette is applied by `src/client/light-theme.css`.
+- 以暖纸白、墨黑和中性灰建立层级，媒体查看区域保持深色。
+- 以时间码、取景框、播放头、接触印样和细线分隔表达“逐帧整理”。
+- Koma 角色是从零设计的 2～2.5 头身 Q 版“逐帧整理员”：黑发双丸子头、笑眼、低重心小身体，并以小尺寸标识识别为第一优先级。
+- 新角色不沿用旧 Logo 的脸型、发型、服装、姿态或轮廓；项目关联来自她手边的胶片卷和右侧丸子头上的播放标记。
+- 酸性青柠是既有品牌标记，只用于选中、焦点、进度和关键状态，不扩张为大面积主题色。
+- 产品工作台是页面主角；角色负责品牌、引导和空状态，不遮挡表单、视频或结果。
 
-- Background: warm paper-like off-white, never stark pure white across the whole page.
-- Panels: white and soft warm-gray surfaces, separated mainly by hairline borders with only subtle elevation.
-- Accent: Koma acid-lime. Use it for active state, focus, progress, and key status only.
-- Media: video players, frame viewers, and image inspection surfaces remain dark for contrast.
-- Danger: warm red reserved for destructive or failed states.
-- Display type: system display sans.
-- Body type: Geist/system sans.
-- Technical metadata: system monospace.
-- Spacing: 4px base scale.
-- Radius: restrained, generally 5–12px. Avoid pill-shaped containers except when semantically necessary.
+## 基础令牌
 
-## Interaction rules
+| 角色 | 值 | 用法 |
+| --- | --- | --- |
+| Paper | `#f3f1eb` | 页面背景 |
+| Paper 2 | `#ece9e1` | 次级区域 |
+| Surface | `#fcfbf8` | 面板与控件 |
+| Ink | `#171716` | 主文字与高对比动作 |
+| Ink 2 | `#4f4d48` | 正文次级文字 |
+| Muted | `#77736a` | 非关键元数据 |
+| Line | `#d8d4ca` | 细分隔线 |
+| Line strong | `#a8a298` | 控件边界 |
+| Accent | `#c7f43a` | 选中、进度、关键标记 |
+| Accent deep | `#587400` | 焦点、可读文字与图标 |
+| Accent soft | `#eef8cf` | 选中背景 |
+| Danger | `#b43e31` | 失败与删除 |
+| Warning | `#a46a08` | 等待与警告 |
+| Media | `#0e0f0d` | 视频和画面查看区域 |
 
-- Keep motion to opacity and transform.
-- Keep UI motion short and quiet; no bounce or overshoot.
-- `:focus-visible` must remain obvious.
-- Respect `prefers-reduced-motion`.
-- Interactive labels should stay on one line on mobile.
-- Never introduce horizontal page scrolling; use `overflow-x: clip`.
+明亮 Accent 不直接承载小字号文字；需要文字或焦点对比时使用 Accent deep。状态不能只靠颜色表达。
 
-## Anti-patterns
+## 排版与形状
 
-Do not drift back toward generic AI/SaaS styling:
+- 界面字体：`Avenir Next`、`PingFang SC`、`Hiragino Sans GB` 和系统无衬线回退。
+- 展示字体：`Avenir Next Condensed` / `Avenir Next`；中文继续使用可靠的系统中文字体。
+- 时间码与技术元数据：`SFMono-Regular`、`Roboto Mono` 和等宽回退。
+- 正文至少 14px；9–11px 只用于非关键标签和时间码。
+- 使用 4px 基础间距，常用阶梯为 4、8、12、16、20、24、32、40、48、64px。
+- 常用圆角为 6、8、10、14px；媒体容器最多 16px。胶囊只用于确有语义的状态。
+- 主要靠留白、字号、字重和细线建立层级；阴影仅用于弹窗、菜单和必要的浮层。
 
-- no gradient hero backgrounds or glowing radial blobs;
-- no oversized marketing hero competing with the actual analysis form;
-- no rows of decorative feature cards when the workbench itself demonstrates the product;
-- no fake browser/IDE chrome;
-- no gratuitous all-caps section kickers;
-- no invented metrics or social proof;
-- no excessive floating shadows or pill containers;
-- no italic display headings;
-- no full-app dark theme unless explicitly requested again.
+## 页面结构
 
-## Product consistency
+- 首页：紧凑说明栏与占主导地位的分析工作台组成非对称网格；输入、分析目标、高级设置和开始动作保持单一阅读顺序。
+- 进度页：沿用同一工作台骨架，以百分比、阶段和服务端详情说明真实进度。
+- 结果页：视频、时间码、关键帧、章节与字幕构成主要浏览路径；桌面保留主内容与固定字幕栏的双列布局。
+- 后台：共享同一颜色、排版、控件和状态语言，但更紧凑；角色只出现在品牌与登录入口。
+- 弹窗：高级设置、历史、帮助、画面预览和任务详情共享一致的标题、关闭、滚动和焦点规则。
+- 移动端：任务表单优先于品牌说明；结果改为单列阅读；不得产生页面级水平滚动。
 
-The public app, history dialogs, result pages, and administration console share the same tokens. Dense admin surfaces can be more utilitarian, but they should not become a separate visual product.
+## 交互与可访问性
 
-Preserve routes, copy intent, analysis behavior, ownership rules, provider configuration, and data contracts when changing presentation.
+- 动效限于透明度和位移，常用时长 120–240ms；不使用弹跳、视差或装饰性循环动画。
+- 支持 `prefers-reduced-motion`，关闭非必要动画。
+- 所有交互元素必须有清晰的 hover、active、disabled 和 `:focus-visible` 状态。
+- 正文达到 WCAG AA 4.5:1；大字号文字和控件边界至少 3:1。
+- 键盘可以完成上传选择、模式切换、预设选择、弹窗操作、关键帧切换和结果跳转。
+- 触控目标至少 44×44px；错误使用文本和 `role="alert"`，异步进度使用可感知的状态说明。
+- 装饰性角色图使用空 `alt`；关键帧和有信息意义的图像保留描述。
+
+## 禁止项
+
+- 不使用渐变 Hero、彩色大背景、玻璃拟态、发光球或装饰网格。
+- 不用成排卡片代替真正的信息结构，也不制作假的浏览器或剪辑软件外壳。
+- 不把角色或酸性青柠扩张成粉紫色、霓虹色或高饱和主题。
+- 不使用虚构指标、社交证明、能力或处理状态。
+- 不让巨型营销标题、角色插图或阴影抢过分析工作台。
+
+## 产品契约
+
+视觉重构只重新组织和呈现既有能力。必须保留现有路由、双语文案意图、上传与链接输入、分析预设、高级提取、任务进度、回看链接、浏览器所有权、删除权限、Provider 配置、文件下载、播放器同步、API 形状和数据契约。

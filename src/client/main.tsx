@@ -2,11 +2,9 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import AdminApp from "./AdminApp.tsx";
-import "./styles.css";
-import "./hallmark.css";
-import "./mobile-header.css";
-import "./light-theme.css";
-import "./home.css";
+import "./atelier-foundation.css";
+import "./atelier-public.css";
+import "./atelier-admin.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

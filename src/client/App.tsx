@@ -37,6 +37,8 @@ const copy = {
     badge: "VIDEO INTELLIGENCE WORKSPACE",
     hero: "Turn video into data you can use.",
     intro: "Give Koma a video. Get the moments, subtitles, summary, or specific information you actually need.",
+    mascotCue: "Your frame editor is ready.",
+    mascotCueText: "I watch the frames, listen to the audio, and arrange every useful finding on the timeline.",
     flowVideo: "VIDEO",
     flowSignals: "AUDIO + FRAMES",
     flowOutput: "DATA + FILES",
@@ -185,6 +187,8 @@ const copy = {
     badge: "视频理解与数据提取工作台",
     hero: "把视频，变成可以使用的数据。",
     intro: "给 Koma 一段视频，得到关键内容、字幕、总结，或者你真正需要的信息。",
+    mascotCue: "逐帧整理员已就位。",
+    mascotCueText: "我会同时看画面、听声音，再把有用的内容按时间码整理好。",
     flowVideo: "视频",
     flowSignals: "声音 + 画面",
     flowOutput: "数据 + 文件",
@@ -384,8 +388,8 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
 
 function Brand({ onClick, label }: { onClick?: () => void; label?: string }) {
   return onClick
-    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><img src="/koma-icon-64.png" alt="" className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>KOMA</span></span></button>
-    : <div className="brand-lockup"><img src="/koma-icon-64.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>KOMA</span></div></div>;
+    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><img src="/koma-icon-64.png" alt="" className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>FRAME ATELIER</span></span></button>
+    : <div className="brand-lockup"><img src="/koma-icon-64.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>FRAME ATELIER</span></div></div>;
 }
 
 function App() {
@@ -612,6 +616,13 @@ function App() {
           <div className="hero-badge"><span />{t.badge}</div>
           <h1>{t.hero}</h1>
           <p>{t.intro}</p>
+          <div className="hero-flow" aria-label={`${t.flowVideo}, ${t.flowSignals}, ${t.flowOutput}`}>
+            <span>{t.flowVideo}</span><i aria-hidden="true" /><span>{t.flowSignals}</span><i aria-hidden="true" /><strong>{t.flowOutput}</strong>
+          </div>
+          <div className="hero-character">
+            <img className="hero-character-portrait" src="/koma-mascot.png" alt="" />
+            <div className="hero-character-copy"><span>FRAME ASSISTANT · 00:00:01</span><strong>{t.mascotCue}</strong><small>{t.mascotCueText}</small></div>
+          </div>
         </div>
 
         <form className="capture-card" onSubmit={startAnalysis} aria-busy={busy} aria-label={t.startOne}>
@@ -663,7 +674,7 @@ function ProgressView({ job, progress, error, onClear, onRetry, language }: { jo
   const t = copy[language];
   const failed = job.status === "failed";
   return <section className="progress-layout"><div className="progress-copy"><span className="page-label">{job.source === "url" ? t.analyzingRemote : t.analyzingLocal}</span><h1>{t.progressTitle}</h1><p>{t.progressText}</p></div>
-    <div className="progress-card"><div className="progress-mascot"><img src="/koma-icon.png" alt="" /></div><div className="progress-status"><span>{job.progress ? t.stage[job.progress.stage] || t.processing : t.processing}</span><strong>{progress}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{translateServerError(error || job.error, language)}</div>}<div className="process-list"><span className="done">{t.entered}</span><span className={progress >= 35 ? "done" : "current"}>{t.mediaAnalysis}</span><span className={progress >= 100 ? "done" : "waiting"}>{t.readableResult}</span></div>{failed ? <div className="retry-row"><button className="primary-button" type="button" onClick={onRetry}>{t.retry}<Glyph name="arrow" size={17} /></button><button className="text-button" type="button" onClick={onClear}>{t.cancel}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
+    <div className="progress-card"><div className="progress-mascot"><img src="/koma-mascot.png" alt="" /></div><div className="progress-status"><span>{job.progress ? t.stage[job.progress.stage] || t.processing : t.processing}</span><strong>{progress}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{translateServerError(error || job.error, language)}</div>}<div className="process-list"><span className="done">{t.entered}</span><span className={progress >= 35 ? "done" : "current"}>{t.mediaAnalysis}</span><span className={progress >= 100 ? "done" : "waiting"}>{t.readableResult}</span></div>{failed ? <div className="retry-row"><button className="primary-button" type="button" onClick={onRetry}>{t.retry}<Glyph name="arrow" size={17} /></button><button className="text-button" type="button" onClick={onClear}>{t.cancel}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
   </section>;
 }
 
