@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
 import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
+import { progressStepStates } from "./progress.js";
 
 type Language = "en" | "zh";
 
@@ -673,8 +674,11 @@ function App() {
 function ProgressView({ job, progress, error, onClear, onRetry, language }: { job: Job; progress: number; error: string; onClear: () => void; onRetry: () => void; language: Language }) {
   const t = copy[language];
   const failed = job.status === "failed";
+  const safeProgress = Math.min(100, Math.max(0, progress));
+  const stageLabel = job.progress ? t.stage[job.progress.stage] || t.processing : t.processing;
+  const steps = progressStepStates(job.progress?.stage || "queued", job.status, safeProgress);
   return <section className="progress-layout"><div className="progress-copy"><span className="page-label">{job.source === "url" ? t.analyzingRemote : t.analyzingLocal}</span><h1>{t.progressTitle}</h1><p>{t.progressText}</p></div>
-    <div className="progress-card"><div className="progress-mascot"><img src="/koma-mascot.png" alt="" /></div><div className="progress-status"><span>{job.progress ? t.stage[job.progress.stage] || t.processing : t.processing}</span><strong>{progress}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{translateServerError(error || job.error, language)}</div>}<div className="process-list"><span className="done">{t.entered}</span><span className={progress >= 35 ? "done" : "current"}>{t.mediaAnalysis}</span><span className={progress >= 100 ? "done" : "waiting"}>{t.readableResult}</span></div>{failed ? <div className="retry-row"><button className="primary-button" type="button" onClick={onRetry}>{t.retry}<Glyph name="arrow" size={17} /></button><button className="text-button" type="button" onClick={onClear}>{t.cancel}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
+    <div className={`progress-card ${failed ? "failed" : ""}`}><div className="progress-mascot"><img src="/koma-mascot.png" alt="" /></div><div className="progress-status"><span aria-live="polite" aria-atomic="true">{stageLabel}</span><strong aria-hidden={failed}>{failed ? "!" : `${safeProgress}%`}</strong></div>{!failed && <div className="progress-track" role="progressbar" aria-label={stageLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeProgress}><span style={{ width: `${safeProgress}%` }} /></div>}<p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{translateServerError(error || job.error, language)}</div>}<div className="process-list"><span className={steps[0]} aria-current={steps[0] === "current" ? "step" : undefined}>{t.entered}</span><span className={steps[1]} aria-current={steps[1] === "current" ? "step" : undefined}>{t.mediaAnalysis}</span><span className={steps[2]} aria-current={steps[2] === "current" ? "step" : undefined}>{t.readableResult}</span></div>{failed ? <div className="retry-row"><button className="primary-button" type="button" onClick={onRetry}>{t.retry}<Glyph name="arrow" size={17} /></button><button className="text-button" type="button" onClick={onClear}>{t.cancel}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
   </section>;
 }
 
