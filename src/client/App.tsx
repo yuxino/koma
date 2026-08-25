@@ -12,7 +12,7 @@ import {
 } from "./analysis-config.js";
 import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
-import { summarizeOutputSchema } from "./output-schema-summary.js";
+import { summarizeOutputSchema, type OutputSchemaSummary } from "./output-schema-summary.js";
 import { progressStepStates } from "./progress.js";
 
 type Language = "en" | "zh";
@@ -75,10 +75,16 @@ const copy = {
     customExtract: "JSON editor",
     customHint: "No fixed shape · AI decides from your request",
     advancedDescription: "Review or edit the JSON shape Koma will return. Leave it empty to let AI decide during analysis.",
+    reviewFieldsTitle: "Review output fields",
+    reviewFieldsDescription: "Check what every candidate field means. Nothing changes until you confirm this list.",
+    candidateFieldsNotice: "Candidate only · your current fields remain unchanged until confirmation",
+    editJsonStructure: "Edit JSON",
+    previewFields: "Preview fields",
+    confirmFields: "Use these fields",
+    fieldsNeedDefinition: "Add at least one valid field before previewing.",
     advancedConfigured: "JSON shape ready",
     advancedRequirement: "Request added",
     cancelSettings: "Cancel",
-    applySettings: "Use this JSON",
     presetsLabel: "What should this video become?",
     presetsHint: "Describe the result in plain language. Koma can turn it into editable JSON.",
     analysisRequirement: "Tell Koma what you need",
@@ -108,7 +114,6 @@ const copy = {
     schemaNeedsRequest: "Describe what you want first, or choose a quick addition.",
     schemaUnavailable: "AI JSON creation needs a configured vision model. You can still edit JSON manually.",
     schemaGenerateFailed: "Koma could not create the JSON shape. Your current configuration is unchanged.",
-    confirmReplaceSchema: "Replace the current JSON shape with a newly generated one?",
     configAutosaved: "Draft saved in this browser",
     saveDefault: "Set as default",
     restoreDefault: "Restore default",
@@ -252,10 +257,16 @@ const copy = {
     customExtract: "JSON 编辑器",
     customHint: "未固定结构 · 分析时由 AI 按要求整理",
     advancedDescription: "检查或修改 Koma 将返回的 JSON 结构。留空时，分析过程中由 AI 自行决定。",
+    reviewFieldsTitle: "确认输出字段",
+    reviewFieldsDescription: "先检查每个候选字段的含义；确认前不会替换当前设置。",
+    candidateFieldsNotice: "仅为候选稿 · 确认前不会改动当前字段",
+    editJsonStructure: "编辑 JSON",
+    previewFields: "预览字段",
+    confirmFields: "确认使用这些字段",
+    fieldsNeedDefinition: "请先添加至少一个有效字段，再查看预览。",
     advancedConfigured: "JSON 结构已就绪",
     advancedRequirement: "已填写要求",
     cancelSettings: "取消",
-    applySettings: "使用这份 JSON",
     presetsLabel: "你想得到什么？",
     presetsHint: "直接说结果要包含什么，Koma 可以先帮你整理成可编辑的 JSON。",
     analysisRequirement: "告诉 Koma 你想要什么",
@@ -285,7 +296,6 @@ const copy = {
     schemaNeedsRequest: "先说说你想要什么，或者选择一个快速补充。",
     schemaUnavailable: "AI 整理 JSON 需要先配置视觉模型；你仍然可以手动编辑 JSON。",
     schemaGenerateFailed: "这次没有整理出可用的 JSON，当前配置没有被覆盖。",
-    confirmReplaceSchema: "要用新生成的内容替换当前 JSON 结构吗？",
     configAutosaved: "草稿已自动保存在这个浏览器",
     saveDefault: "设为默认",
     restoreDefault: "恢复默认",
@@ -484,6 +494,7 @@ function App() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [editorInitialSchema, setEditorInitialSchema] = useState(initialAnalysisConfig.draft.outputSchema);
+  const [schemaDialogInitialView, setSchemaDialogInitialView] = useState<"review" | "edit">("edit");
   const [instruction, setInstruction] = useState(initialAnalysisConfig.draft.instruction);
   const [suggestionIds, setSuggestionIds] = useState<AnalysisSuggestionId[]>(() => initialAnalysisConfig.draft.suggestionIds.filter(isAnalysisSuggestionId));
   const [outputSchema, setOutputSchema] = useState(initialAnalysisConfig.draft.outputSchema);
@@ -495,7 +506,9 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const schemaGenerateTriggerRef = useRef<HTMLButtonElement>(null);
   const advancedTriggerRef = useRef<HTMLButtonElement>(null);
+  const schemaDialogReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const schemaGenerationAbortRef = useRef<AbortController | null>(null);
   const schemaGenerationRequestRef = useRef(0);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -705,7 +718,7 @@ function App() {
       setSchemaActionError(t.schemaUnavailable);
       return;
     }
-    if (hasOutputSchema && !window.confirm(t.confirmReplaceSchema)) return;
+    schemaDialogReturnFocusRef.current = schemaGenerateTriggerRef.current;
     schemaGenerationAbortRef.current?.abort();
     const controller = new AbortController();
     const requestId = schemaGenerationRequestRef.current + 1;
@@ -731,6 +744,7 @@ function App() {
       parseOutputSchema(serialized, t.schemaGenerateFailed);
       if (schemaGenerationRequestRef.current !== requestId) return;
       setEditorInitialSchema(serialized);
+      setSchemaDialogInitialView("review");
       setShowAdvancedSettings(true);
     } catch (cause) {
       if (controller.signal.aborted || schemaGenerationRequestRef.current !== requestId) return;
@@ -816,15 +830,11 @@ function App() {
               <div className="json-workflow-main">
                 <div className="json-workflow-status"><span aria-hidden="true" /><div><strong>{hasOutputSchema ? t.jsonReady : t.jsonAutomatic}</strong><small>{hasOutputSchema ? t.jsonReadyHint : t.jsonAutomaticHint}</small></div></div>
                 <div className="json-workflow-actions">
-                  <button className="json-ai-button" type="button" disabled={generatingSchema} onClick={generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.buildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
-                  <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
+                  <button ref={schemaGenerateTriggerRef} className="json-ai-button" type="button" disabled={generatingSchema} onClick={generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.buildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
+                  <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setSchemaDialogInitialView("edit"); schemaDialogReturnFocusRef.current = advancedTriggerRef.current; setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
                 </div>
               </div>
-              {hasOutputSchema && <div className="output-field-summary" aria-label={t.outputFields}>
-                <div className="output-field-summary-head"><strong>{t.outputFields}</strong><span>{outputFieldSummary.total} {t.outputFieldsCount}</span></div>
-                {outputFieldSummary.fields.length ? <div className="output-field-list">{outputFieldSummary.fields.map((field) => <div key={field.path}><code title={field.path}>{field.path}</code><span>{field.meaning}<i aria-hidden="true">·</i>{field.type}</span></div>)}</div> : <p>{t.outputFieldsEmpty}</p>}
-                {outputFieldSummary.total > outputFieldSummary.fields.length && <p>+{outputFieldSummary.total - outputFieldSummary.fields.length} {t.outputFieldsMore}</p>}
-              </div>}
+              {hasOutputSchema && <OutputFieldSummaryView summary={outputFieldSummary} language={language} />}
             </div>
             {schemaActionError && <p className="analysis-config-error" role="alert">{schemaActionError}</p>}
             <div className="config-memory"><span><i aria-hidden="true" />{configNotice || t.configAutosaved}</span><div><button type="button" disabled={generatingSchema} onClick={saveCurrentAsDefault}>{t.saveDefault}</button><button type="button" disabled={generatingSchema || !defaultConfig} onClick={restoreSavedDefault}>{t.restoreDefault}</button></div></div>
@@ -837,7 +847,7 @@ function App() {
       {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} language={language} />}
       {hasResult && <ResultView job={job} onRestart={restartAnalysis} onDelete={deleteOwnedJob} language={language} />}
     </main>
-    {showAdvancedSettings && <AdvancedSettingsDialog language={language} outputSchema={editorInitialSchema} returnFocusRef={advancedTriggerRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
+    {showAdvancedSettings && <AdvancedSettingsDialog language={language} outputSchema={editorInitialSchema} initialView={schemaDialogInitialView} returnFocusRef={schemaDialogReturnFocusRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
       setOutputSchema(next.outputSchema);
       setShowAdvancedSettings(false);
       setSchemaActionError("");
@@ -972,15 +982,27 @@ interface AdvancedSettingsValue {
   outputSchema: string;
 }
 
-function AdvancedSettingsDialog({ language, outputSchema, returnFocusRef, onCancel, onApply }: {
+function OutputFieldSummaryView({ summary, language }: { summary: OutputSchemaSummary; language: Language }) {
+  const t = copy[language];
+  return <div className="output-field-summary" aria-label={t.outputFields}>
+    <div className="output-field-summary-head"><strong>{t.outputFields}</strong><span>{summary.total} {t.outputFieldsCount}</span></div>
+    {summary.fields.length ? <div className="output-field-list">{summary.fields.map((field) => <div key={field.path}><code title={field.path}>{field.path}</code><span>{field.meaning}<i aria-hidden="true">·</i>{field.type}</span></div>)}</div> : <p>{t.outputFieldsEmpty}</p>}
+    {summary.total > summary.fields.length && <p>+{summary.total - summary.fields.length} {t.outputFieldsMore}</p>}
+  </div>;
+}
+
+function AdvancedSettingsDialog({ language, outputSchema, initialView, returnFocusRef, onCancel, onApply }: {
   language: Language;
   outputSchema: string;
+  initialView: "review" | "edit";
   returnFocusRef: RefObject<HTMLButtonElement | null>;
   onCancel: () => void;
   onApply: (value: AdvancedSettingsValue) => void;
 }) {
   const t = copy[language];
   const [draftSchema, setDraftSchema] = useState(outputSchema);
+  const [view, setView] = useState(initialView);
+  const [previewError, setPreviewError] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const schemaRef = useRef<HTMLTextAreaElement>(null);
@@ -1041,6 +1063,8 @@ function AdvancedSettingsDialog({ language, outputSchema, returnFocusRef, onCanc
     try { parseOutputSchema(draftSchema, t.invalidSchema); }
     catch { dialogError = t.invalidSchema; }
   }
+  const fieldSummary = summarizeOutputSchema(draftSchema, language, 64);
+  const isReview = view === "review";
 
   function formatDraftSchema() {
     if (!draftSchema.trim() || dialogError) {
@@ -1051,26 +1075,54 @@ function AdvancedSettingsDialog({ language, outputSchema, returnFocusRef, onCanc
     setDraftSchema(JSON.stringify(parsed, null, 2));
   }
 
-  function applySettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function previewFields() {
     if (dialogError) {
       schemaRef.current?.focus();
       return;
     }
+    if (!fieldSummary.total) {
+      setPreviewError(t.fieldsNeedDefinition);
+      schemaRef.current?.focus();
+      return;
+    }
+    setPreviewError("");
+    setView("review");
+    window.requestAnimationFrame(() => titleRef.current?.focus());
+  }
+
+  function editJson() {
+    setView("edit");
+    window.requestAnimationFrame(() => schemaRef.current?.focus());
+  }
+
+  function submitSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isReview) {
+      previewFields();
+      return;
+    }
+    if (!fieldSummary.total) return;
     onApply({ outputSchema: draftSchema });
   }
 
   return <dialog ref={dialogRef} className="advanced-dialog" aria-modal="true" aria-labelledby="advanced-dialog-title" aria-describedby="advanced-dialog-description" onCancel={(event) => { event.preventDefault(); onCancelRef.current(); }} onClick={(event) => { if (event.target === event.currentTarget) onCancelRef.current(); }}>
-    <form className="advanced-dialog-shell" onSubmit={applySettings}>
+    <form className="advanced-dialog-shell" onSubmit={submitSettings}>
       <header className="advanced-dialog-head">
-        <div><span className="page-label">KOMA JSON</span><h2 ref={titleRef} id="advanced-dialog-title" tabIndex={-1}>{t.customExtract}</h2><p id="advanced-dialog-description">{t.advancedDescription}</p></div>
+        <div><span className="page-label">{isReview ? "KOMA FIELD REVIEW" : "KOMA JSON"}</span><h2 ref={titleRef} id="advanced-dialog-title" tabIndex={-1}>{isReview ? t.reviewFieldsTitle : t.customExtract}</h2><p id="advanced-dialog-description">{isReview ? t.reviewFieldsDescription : t.advancedDescription}</p></div>
         <button className="advanced-dialog-close" type="button" onClick={onCancel} aria-label={t.close}>×</button>
       </header>
-      <div className="advanced-dialog-body custom-extraction-fields">
+      {isReview ? <div className="advanced-dialog-body field-review-body">
+        <p className="candidate-fields-notice"><i aria-hidden="true" />{t.candidateFieldsNotice}</p>
+        <OutputFieldSummaryView summary={fieldSummary} language={language} />
+      </div> : <div className="advanced-dialog-body custom-extraction-fields">
         <div className={`json-editor-status ${!draftSchema.trim() ? "empty" : dialogError ? "invalid" : "valid"}`} role="status"><span><i aria-hidden="true" />{!draftSchema.trim() ? t.jsonEmpty : dialogError ? t.jsonInvalid : t.jsonValid}</span><div><button type="button" disabled={!draftSchema.trim() || Boolean(dialogError)} onClick={formatDraftSchema}>{t.formatJson}</button><button type="button" disabled={!draftSchema} onClick={() => { setDraftSchema(""); schemaRef.current?.focus(); }}>{t.clearJson}</button></div></div>
-        <label><span>{t.outputShape}</span><textarea ref={schemaRef} className="schema-input" value={draftSchema} onChange={(event) => setDraftSchema(event.target.value)} maxLength={MAX_OUTPUT_SCHEMA_CHARS} rows={16} spellCheck={false} autoCapitalize="off" autoCorrect="off" placeholder={t.schemaPlaceholder} aria-invalid={Boolean(dialogError)} aria-describedby={dialogError ? "advanced-schema-error" : "advanced-schema-hint"} /><small id="advanced-schema-hint">{t.schemaHint}</small>{dialogError && <small id="advanced-schema-error" className="advanced-dialog-error" role="alert">{dialogError}</small>}</label>
-      </div>
-      <footer className="advanced-dialog-foot"><button className="advanced-dialog-cancel" type="button" onClick={onCancel}>{t.cancelSettings}</button><button className="primary-button" type="submit" disabled={Boolean(dialogError)}>{t.applySettings}<Glyph name="arrow" size={17} /></button></footer>
+        <label><span>{t.outputShape}</span><textarea ref={schemaRef} className="schema-input" value={draftSchema} onChange={(event) => { setDraftSchema(event.target.value); setPreviewError(""); }} maxLength={MAX_OUTPUT_SCHEMA_CHARS} rows={16} spellCheck={false} autoCapitalize="off" autoCorrect="off" placeholder={t.schemaPlaceholder} aria-invalid={Boolean(dialogError || previewError)} aria-describedby={dialogError || previewError ? "advanced-schema-error" : "advanced-schema-hint"} /><small id="advanced-schema-hint">{t.schemaHint}</small>{(dialogError || previewError) && <small id="advanced-schema-error" className="advanced-dialog-error" role="alert">{dialogError || previewError}</small>}</label>
+      </div>}
+      <footer className={`advanced-dialog-foot ${isReview ? "review" : "edit"}`}>
+        <button className="advanced-dialog-cancel" type="button" onClick={onCancel}>{t.cancelSettings}</button>
+        {isReview && <button className="advanced-dialog-cancel" type="button" onClick={editJson}>{t.editJsonStructure}</button>}
+        <button className="primary-button" type="submit" disabled={isReview ? !fieldSummary.total : Boolean(dialogError) || !draftSchema.trim()}>{isReview ? t.confirmFields : t.previewFields}<Glyph name="arrow" size={17} /></button>
+      </footer>
     </form>
   </dialog>;
 }

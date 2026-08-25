@@ -1176,6 +1176,63 @@
   gap: 18px;
 }
 
+.app-shell .advanced-dialog-body.field-review-body {
+  display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 26px 28px;
+  align-content: start;
+  gap: 18px;
+}
+
+.app-shell .candidate-fields-notice {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.app-shell .candidate-fields-notice i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(23, 23, 22, .24);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.app-shell .field-review-body .output-field-summary {
+  gap: 12px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.app-shell .field-review-body .output-field-summary-head strong {
+  font-size: 12px;
+}
+
+.app-shell .field-review-body .output-field-summary-head span {
+  font-size: 9px;
+}
+
+.app-shell .field-review-body .output-field-list > div {
+  grid-template-columns: minmax(150px, .9fr) minmax(180px, 1.1fr);
+  gap: 14px;
+  padding: 11px 0;
+}
+
+.app-shell .field-review-body .output-field-list code,
+.app-shell .field-review-body .output-field-list span {
+  font-size: 11px;
+}
+
 .app-shell .custom-extraction-fields label {
   display: grid;
   min-width: 0;
@@ -3046,7 +3103,8 @@
     font-size: 25px;
   }
 
-  .app-shell .advanced-dialog-body.custom-extraction-fields {
+  .app-shell .advanced-dialog-body.custom-extraction-fields,
+  .app-shell .advanced-dialog-body.field-review-body {
     padding: 18px 17px 24px;
   }
 
@@ -3057,6 +3115,20 @@
   .app-shell .advanced-dialog-foot > button {
     flex: 1 1 0;
     min-width: 0;
+  }
+
+  .app-shell .advanced-dialog-foot.review {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell .advanced-dialog-foot.review .primary-button {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell .field-review-body .output-field-list > div {
+    grid-template-columns: minmax(112px, .9fr) minmax(0, 1.1fr);
+    gap: 10px;
   }
 
   .app-shell .progress-layout {

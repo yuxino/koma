@@ -41,9 +41,11 @@ describe("summarizeOutputSchema", () => {
   });
 
   it("explains common compound business fields in Chinese", () => {
-    expect(summarizeOutputSchema('{"overallSentiment":"string","isSponsored":false}', "zh").fields).toEqual([
+    expect(summarizeOutputSchema('{"overallSentiment":"string","isSponsored":false,"keyPeople":["string"],"firstAppearanceAtMs":0}', "zh").fields).toEqual([
       { path: "overallSentiment", meaning: "整体情感倾向", type: "文本" },
-      { path: "isSponsored", meaning: "是否含商业推广", type: "是 / 否" }
+      { path: "isSponsored", meaning: "是否含商业推广", type: "是 / 否" },
+      { path: "keyPeople[]", meaning: "关键人物", type: "文本" },
+      { path: "firstAppearanceAtMs", meaning: "首次出现时间（毫秒）", type: "数字" }
     ]);
   });
 

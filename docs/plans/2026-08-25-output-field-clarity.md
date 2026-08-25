@@ -38,6 +38,8 @@
 
 **Step 4:** Add compact and mobile styles that preserve the project's monochrome visual language.
 
+**Step 5:** Treat generated or edited JSON as a candidate. Show its human-readable field preview before confirmation, keep the applied structure unchanged on cancel, and make JSON editing return to the preview before it can be applied.
+
 ### Task 3: Verify behavior and presentation
 
 **Files:**
