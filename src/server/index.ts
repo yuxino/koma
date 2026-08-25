@@ -15,7 +15,7 @@ import { normalizeVideoUrl } from "./url-source.js";
 import { parseByteRange } from "./video-stream.js";
 import { createDailyLimiter } from "./rate-limit.js";
 import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis-spec.js";
-import { generateAnalysisSpec, validateAnalysisSpecGenerationInstruction, validateAnalysisSpecGenerationLanguage } from "./analysis-spec-ai.js";
+import { generateAnalysisSpec, validateAnalysisSpecGenerationLanguage, validateAnalysisSpecGenerationRequest } from "./analysis-spec-ai.js";
 import { contentDisposition } from "./artifacts.js";
 import {
   adminAuthEnabled,
@@ -63,19 +63,19 @@ app.get("/api/health", async () => {
 app.post("/api/analysis-spec/generate", { bodyLimit: 16 * 1024 }, async (request, reply) => {
   reply.header("cache-control", "no-store");
   let instruction: string;
+  let additions: string[];
+  let language: "en" | "zh" | undefined;
   try {
-    const body = request.body as { instruction?: unknown; lang?: unknown } | undefined;
-    instruction = validateAnalysisSpecGenerationInstruction(
-      body?.instruction
-    );
-    validateAnalysisSpecGenerationLanguage(body?.lang);
+    const body = request.body as { instruction?: unknown; additions?: unknown; lang?: unknown } | undefined;
+    ({ instruction, additions } = validateAnalysisSpecGenerationRequest(body?.instruction, body?.additions));
+    language = validateAnalysisSpecGenerationLanguage(body?.lang);
   } catch (error) {
     return reply.code(400).send({ error: messageOf(error) });
   }
   // Invalid input must not consume the same public demo allowance used by analysis jobs.
   if (!acceptDemoRequest(request, reply)) return;
   try {
-    return reply.send(await generateAnalysisSpec({ instruction }));
+    return reply.send(await generateAnalysisSpec({ instruction, additions, language }));
   } catch (error) {
     return reply.code(statusCodeOf(error) || 502).send({ error: messageOf(error) });
   }

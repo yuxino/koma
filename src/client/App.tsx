@@ -8,11 +8,12 @@ import {
   saveAnalysisDefault,
   updateAnalysisDraft,
   type AnalysisDraft,
+  type AnalysisFieldDescription,
   type AnalysisSuggestionId
 } from "./analysis-config.js";
 import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
-import { summarizeOutputSchema, type OutputSchemaSummary } from "./output-schema-summary.js";
+import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
 import { progressStepStates } from "./progress.js";
 
 type Language = "en" | "zh";
@@ -103,6 +104,9 @@ const copy = {
     outputFieldsCount: "fields",
     outputFieldsMore: "more in the JSON editor",
     outputFieldsEmpty: "This structure does not contain any visible fields yet.",
+    fieldsFromRequest: "From your request",
+    fieldsFromAdditions: "From quick additions",
+    fieldsFromStructure: "From the JSON structure",
     jsonValid: "Valid JSON",
     jsonInvalid: "JSON needs attention",
     jsonEmpty: "Empty · AI decides automatically",
@@ -285,6 +289,9 @@ const copy = {
     outputFieldsCount: "个字段",
     outputFieldsMore: "个字段可在 JSON 编辑器中查看",
     outputFieldsEmpty: "这份结构暂时没有可展示的字段。",
+    fieldsFromRequest: "来自你的要求",
+    fieldsFromAdditions: "来自快速补充",
+    fieldsFromStructure: "来自 JSON 结构",
     jsonValid: "JSON 格式正确",
     jsonInvalid: "JSON 需要修改",
     jsonEmpty: "留空 · 分析时由 AI 决定",
@@ -453,6 +460,28 @@ function parseOutputSchema(value: string, errorMessage: string): unknown {
   }
 }
 
+function parseFieldDescriptions(value: unknown, errorMessage: string): AnalysisFieldDescription[] {
+  if (!Array.isArray(value)) throw new Error(errorMessage);
+  const descriptions: AnalysisFieldDescription[] = [];
+  const seenPaths = new Set<string>();
+  for (const candidate of value) {
+    if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) throw new Error(errorMessage);
+    const field = candidate as Record<string, unknown>;
+    if (typeof field.path !== "string"
+      || typeof field.label !== "string"
+      || typeof field.description !== "string"
+      || (field.source !== "request" && field.source !== "addition")) throw new Error(errorMessage);
+    const path = field.path.trim();
+    const label = field.label.trim();
+    const description = field.description.trim();
+    if (!path || !label || !description || seenPaths.has(path)) throw new Error(errorMessage);
+    seenPaths.add(path);
+    descriptions.push({ path, label, description, source: field.source });
+  }
+  if (!descriptions.length) throw new Error(errorMessage);
+  return descriptions;
+}
+
 function formatDate(timestamp: number, language: Language): string {
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
 }
@@ -494,10 +523,12 @@ function App() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [editorInitialSchema, setEditorInitialSchema] = useState(initialAnalysisConfig.draft.outputSchema);
+  const [editorInitialFieldDescriptions, setEditorInitialFieldDescriptions] = useState<AnalysisFieldDescription[]>(initialAnalysisConfig.draft.fieldDescriptions ?? []);
   const [schemaDialogInitialView, setSchemaDialogInitialView] = useState<"review" | "edit">("edit");
   const [instruction, setInstruction] = useState(initialAnalysisConfig.draft.instruction);
   const [suggestionIds, setSuggestionIds] = useState<AnalysisSuggestionId[]>(() => initialAnalysisConfig.draft.suggestionIds.filter(isAnalysisSuggestionId));
   const [outputSchema, setOutputSchema] = useState(initialAnalysisConfig.draft.outputSchema);
+  const [fieldDescriptions, setFieldDescriptions] = useState<AnalysisFieldDescription[]>(initialAnalysisConfig.draft.fieldDescriptions ?? []);
   const [defaultConfig, setDefaultConfig] = useState<AnalysisDraft | undefined>(initialAnalysisConfig.defaultConfig);
   const [generatingSchema, setGeneratingSchema] = useState(false);
   const [schemaActionError, setSchemaActionError] = useState("");
@@ -523,7 +554,12 @@ function App() {
   const instructionLimit = Math.max(0, MAX_ANALYSIS_INSTRUCTION_CHARS - suggestionInstructionLength - (suggestionInstructionLength ? 2 : 0));
   const hasOutputSchema = Boolean(outputSchema.trim());
   const outputFieldSummary = summarizeOutputSchema(outputSchema, language);
-  const currentAnalysisDraft: AnalysisDraft = { instruction, suggestionIds, outputSchema };
+  const currentAnalysisDraft: AnalysisDraft = {
+    instruction,
+    suggestionIds,
+    outputSchema,
+    ...(fieldDescriptions.length ? { fieldDescriptions } : {})
+  };
 
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
@@ -532,8 +568,8 @@ function App() {
   }, [language]);
 
   useEffect(() => {
-    updateAnalysisDraft(window.localStorage, { instruction, suggestionIds, outputSchema });
-  }, [instruction, suggestionIds, outputSchema]);
+    updateAnalysisDraft(window.localStorage, currentAnalysisDraft);
+  }, [instruction, suggestionIds, outputSchema, fieldDescriptions]);
 
   useEffect(() => () => {
     schemaGenerationRequestRef.current += 1;
@@ -726,14 +762,18 @@ function App() {
     schemaGenerationAbortRef.current = controller;
     setGeneratingSchema(true);
     try {
+      const selectedSuggestions = new Set(suggestionIds);
+      const additions = analysisSuggestions(language)
+        .filter((item) => selectedSuggestions.has(item.id))
+        .map((item) => item.instruction);
       const response = await fetch("/api/analysis-spec/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ instruction: composedInstruction, lang: language }),
+        body: JSON.stringify({ instruction: instruction.trim(), additions, lang: language }),
         signal: controller.signal
       });
-      const body = await response.json().catch(() => ({})) as { outputSchema?: unknown; error?: string };
+      const body = await response.json().catch(() => ({})) as { outputSchema?: unknown; fieldDescriptions?: unknown; error?: string };
       if (!response.ok) {
         if (response.status === 503) throw new Error(t.schemaUnavailable);
         if (response.status === 400 || response.status === 429) throw new Error(body.error || t.schemaGenerateFailed);
@@ -742,8 +782,10 @@ function App() {
       const serialized = JSON.stringify(body.outputSchema, null, 2);
       if (!serialized) throw new Error(t.schemaGenerateFailed);
       parseOutputSchema(serialized, t.schemaGenerateFailed);
+      const generatedDescriptions = parseFieldDescriptions(body.fieldDescriptions, t.schemaGenerateFailed);
       if (schemaGenerationRequestRef.current !== requestId) return;
       setEditorInitialSchema(serialized);
+      setEditorInitialFieldDescriptions(generatedDescriptions);
       setSchemaDialogInitialView("review");
       setShowAdvancedSettings(true);
     } catch (cause) {
@@ -771,6 +813,7 @@ function App() {
     setInstruction(stored.draft.instruction);
     setSuggestionIds(stored.draft.suggestionIds.filter(isAnalysisSuggestionId));
     setOutputSchema(stored.draft.outputSchema);
+    setFieldDescriptions(stored.draft.fieldDescriptions ?? []);
     setDefaultConfig(stored.defaultConfig);
     setSchemaActionError("");
     setConfigNotice(t.defaultRestored);
@@ -831,10 +874,10 @@ function App() {
                 <div className="json-workflow-status"><span aria-hidden="true" /><div><strong>{hasOutputSchema ? t.jsonReady : t.jsonAutomatic}</strong><small>{hasOutputSchema ? t.jsonReadyHint : t.jsonAutomaticHint}</small></div></div>
                 <div className="json-workflow-actions">
                   <button ref={schemaGenerateTriggerRef} className="json-ai-button" type="button" disabled={generatingSchema} onClick={generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.buildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
-                  <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setSchemaDialogInitialView("edit"); schemaDialogReturnFocusRef.current = advancedTriggerRef.current; setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
+                  <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setEditorInitialFieldDescriptions(fieldDescriptions); setSchemaDialogInitialView("edit"); schemaDialogReturnFocusRef.current = advancedTriggerRef.current; setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
                 </div>
               </div>
-              {hasOutputSchema && <OutputFieldSummaryView summary={outputFieldSummary} language={language} />}
+              {hasOutputSchema && <OutputFieldSummaryView summary={outputFieldSummary} fieldDescriptions={fieldDescriptions} language={language} />}
             </div>
             {schemaActionError && <p className="analysis-config-error" role="alert">{schemaActionError}</p>}
             <div className="config-memory"><span><i aria-hidden="true" />{configNotice || t.configAutosaved}</span><div><button type="button" disabled={generatingSchema} onClick={saveCurrentAsDefault}>{t.saveDefault}</button><button type="button" disabled={generatingSchema || !defaultConfig} onClick={restoreSavedDefault}>{t.restoreDefault}</button></div></div>
@@ -847,8 +890,9 @@ function App() {
       {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} language={language} />}
       {hasResult && <ResultView job={job} onRestart={restartAnalysis} onDelete={deleteOwnedJob} language={language} />}
     </main>
-    {showAdvancedSettings && <AdvancedSettingsDialog language={language} outputSchema={editorInitialSchema} initialView={schemaDialogInitialView} returnFocusRef={schemaDialogReturnFocusRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
+    {showAdvancedSettings && <AdvancedSettingsDialog language={language} outputSchema={editorInitialSchema} fieldDescriptions={editorInitialFieldDescriptions} initialView={schemaDialogInitialView} returnFocusRef={schemaDialogReturnFocusRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
       setOutputSchema(next.outputSchema);
+      setFieldDescriptions(next.fieldDescriptions);
       setShowAdvancedSettings(false);
       setSchemaActionError("");
       setConfigNotice("");
@@ -980,20 +1024,28 @@ function formatBytes(bytes: number): string {
 
 interface AdvancedSettingsValue {
   outputSchema: string;
+  fieldDescriptions: AnalysisFieldDescription[];
 }
 
-function OutputFieldSummaryView({ summary, language }: { summary: OutputSchemaSummary; language: Language }) {
+function OutputFieldSummaryView({ summary, fieldDescriptions = [], language }: { summary: OutputSchemaSummary; fieldDescriptions?: AnalysisFieldDescription[]; language: Language }) {
   const t = copy[language];
+  const presented = attachFieldDescriptions(summary, fieldDescriptions);
+  const groups: Array<{ key: "request" | "addition" | "structure"; label: string; fields: PresentedOutputField[] }> = [
+    { key: "request", label: t.fieldsFromRequest, fields: presented.fields.filter((field) => field.source === "request") },
+    { key: "addition", label: t.fieldsFromAdditions, fields: presented.fields.filter((field) => field.source === "addition") },
+    { key: "structure", label: t.fieldsFromStructure, fields: presented.fields.filter((field) => !field.source) }
+  ].filter((group) => group.fields.length) as Array<{ key: "request" | "addition" | "structure"; label: string; fields: PresentedOutputField[] }>;
   return <div className="output-field-summary" aria-label={t.outputFields}>
-    <div className="output-field-summary-head"><strong>{t.outputFields}</strong><span>{summary.total} {t.outputFieldsCount}</span></div>
-    {summary.fields.length ? <div className="output-field-list">{summary.fields.map((field) => <div key={field.path}><code title={field.path}>{field.path}</code><span>{field.meaning}<i aria-hidden="true">·</i>{field.type}</span></div>)}</div> : <p>{t.outputFieldsEmpty}</p>}
-    {summary.total > summary.fields.length && <p>+{summary.total - summary.fields.length} {t.outputFieldsMore}</p>}
+    <div className="output-field-summary-head"><strong>{t.outputFields}</strong><span>{presented.total} {t.outputFieldsCount}</span></div>
+    {presented.fields.length ? <div className="output-field-groups">{groups.map((group) => <section key={group.key} className={`output-field-group ${group.key}`}><h4>{group.label}</h4><div className="output-field-list">{group.fields.map((field) => <div className="output-field-row" key={field.path}><div className="output-field-identity"><strong>{field.label}</strong><code title={field.path}>{field.path}</code></div><div className="output-field-detail">{field.description && <p>{field.description}</p>}<span>{field.type}</span></div></div>)}</div></section>)}</div> : <p>{t.outputFieldsEmpty}</p>}
+    {presented.total > presented.fields.length && <p>+{presented.total - presented.fields.length} {t.outputFieldsMore}</p>}
   </div>;
 }
 
-function AdvancedSettingsDialog({ language, outputSchema, initialView, returnFocusRef, onCancel, onApply }: {
+function AdvancedSettingsDialog({ language, outputSchema, fieldDescriptions, initialView, returnFocusRef, onCancel, onApply }: {
   language: Language;
   outputSchema: string;
+  fieldDescriptions: AnalysisFieldDescription[];
   initialView: "review" | "edit";
   returnFocusRef: RefObject<HTMLButtonElement | null>;
   onCancel: () => void;
@@ -1063,7 +1115,10 @@ function AdvancedSettingsDialog({ language, outputSchema, initialView, returnFoc
     try { parseOutputSchema(draftSchema, t.invalidSchema); }
     catch { dialogError = t.invalidSchema; }
   }
-  const fieldSummary = summarizeOutputSchema(draftSchema, language, 64);
+  const completeFieldSummary = summarizeOutputSchema(draftSchema, language, Number.MAX_SAFE_INTEGER);
+  const fieldSummary: OutputSchemaSummary = { fields: completeFieldSummary.fields.slice(0, 64), total: completeFieldSummary.total };
+  const fieldPaths = new Set(completeFieldSummary.fields.map((field) => field.path));
+  const activeFieldDescriptions = fieldDescriptions.filter((field) => fieldPaths.has(field.path));
   const isReview = view === "review";
 
   function formatDraftSchema() {
@@ -1102,7 +1157,7 @@ function AdvancedSettingsDialog({ language, outputSchema, initialView, returnFoc
       return;
     }
     if (!fieldSummary.total) return;
-    onApply({ outputSchema: draftSchema });
+    onApply({ outputSchema: draftSchema, fieldDescriptions: activeFieldDescriptions });
   }
 
   return <dialog ref={dialogRef} className="advanced-dialog" aria-modal="true" aria-labelledby="advanced-dialog-title" aria-describedby="advanced-dialog-description" onCancel={(event) => { event.preventDefault(); onCancelRef.current(); }} onClick={(event) => { if (event.target === event.currentTarget) onCancelRef.current(); }}>
@@ -1113,7 +1168,7 @@ function AdvancedSettingsDialog({ language, outputSchema, initialView, returnFoc
       </header>
       {isReview ? <div className="advanced-dialog-body field-review-body">
         <p className="candidate-fields-notice"><i aria-hidden="true" />{t.candidateFieldsNotice}</p>
-        <OutputFieldSummaryView summary={fieldSummary} language={language} />
+        <OutputFieldSummaryView summary={fieldSummary} fieldDescriptions={activeFieldDescriptions} language={language} />
       </div> : <div className="advanced-dialog-body custom-extraction-fields">
         <div className={`json-editor-status ${!draftSchema.trim() ? "empty" : dialogError ? "invalid" : "valid"}`} role="status"><span><i aria-hidden="true" />{!draftSchema.trim() ? t.jsonEmpty : dialogError ? t.jsonInvalid : t.jsonValid}</span><div><button type="button" disabled={!draftSchema.trim() || Boolean(dialogError)} onClick={formatDraftSchema}>{t.formatJson}</button><button type="button" disabled={!draftSchema} onClick={() => { setDraftSchema(""); schemaRef.current?.focus(); }}>{t.clearJson}</button></div></div>
         <label><span>{t.outputShape}</span><textarea ref={schemaRef} className="schema-input" value={draftSchema} onChange={(event) => { setDraftSchema(event.target.value); setPreviewError(""); }} maxLength={MAX_OUTPUT_SCHEMA_CHARS} rows={16} spellCheck={false} autoCapitalize="off" autoCorrect="off" placeholder={t.schemaPlaceholder} aria-invalid={Boolean(dialogError || previewError)} aria-describedby={dialogError || previewError ? "advanced-schema-error" : "advanced-schema-hint"} /><small id="advanced-schema-hint">{t.schemaHint}</small>{(dialogError || previewError) && <small id="advanced-schema-error" className="advanced-dialog-error" role="alert">{dialogError || previewError}</small>}</label>

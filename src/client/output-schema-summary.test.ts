@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeOutputSchema } from "./output-schema-summary.js";
+import { attachFieldDescriptions, summarizeOutputSchema } from "./output-schema-summary.js";
 
 describe("summarizeOutputSchema", () => {
   it("lists nested example leaves with stable array paths and localized meanings", () => {
@@ -69,6 +69,20 @@ describe("summarizeOutputSchema", () => {
     expect(summarizeOutputSchema(JSON.stringify(schema), "zh").fields).toEqual([
       { path: "products[].name", meaning: "视频中出现的商品名称", type: "文本" },
       { path: "products[].price", meaning: "价格", type: "数字" }
+    ]);
+  });
+
+  it("uses AI explanations only for matching paths and keeps structural fallbacks for manual fields", () => {
+    const summary = summarizeOutputSchema('{"plates":[{"plateNumber":"string","city":"string","confidence":0}]}', "zh");
+
+    expect(attachFieldDescriptions(summary, [
+      { path: "plates[].plateNumber", label: "车牌号码", description: "视频中识别到的完整车牌号码", source: "request" },
+      { path: "plates[].city", label: "所属城市", description: "根据车牌号码推断的城市", source: "request" },
+      { path: "stale.path", label: "旧字段", description: "不应显示", source: "addition" }
+    ]).fields).toEqual([
+      { path: "plates[].plateNumber", meaning: "plateNumber", type: "文本", label: "车牌号码", description: "视频中识别到的完整车牌号码", source: "request" },
+      { path: "plates[].city", meaning: "city", type: "文本", label: "所属城市", description: "根据车牌号码推断的城市", source: "request" },
+      { path: "plates[].confidence", meaning: "置信度", type: "数字", label: "置信度" }
     ]);
   });
 });

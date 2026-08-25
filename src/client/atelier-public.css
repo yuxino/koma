@@ -899,6 +899,27 @@
   line-height: 1.45;
 }
 
+.app-shell .output-field-groups {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.app-shell .output-field-group {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.app-shell .output-field-group h4 {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: .04em;
+}
+
 .app-shell .output-field-list {
   display: grid;
   min-width: 0;
@@ -906,19 +927,33 @@
   column-gap: 18px;
 }
 
-.app-shell .output-field-list > div {
+.app-shell .output-field-row {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(88px, .8fr) minmax(112px, 1.2fr);
-  align-items: baseline;
+  align-items: start;
   gap: 8px;
   padding: 7px 0;
   border-bottom: 1px solid var(--line);
 }
 
-.app-shell .output-field-list code {
-  overflow: hidden;
+.app-shell .output-field-identity,
+.app-shell .output-field-detail {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app-shell .output-field-identity strong {
   color: var(--ink);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.app-shell .output-field-identity code {
+  overflow: hidden;
+  color: var(--muted);
   font-family: var(--font-mono);
   font-size: 8px;
   line-height: 1.4;
@@ -926,19 +961,18 @@
   white-space: nowrap;
 }
 
-.app-shell .output-field-list span {
-  display: inline-flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 5px;
+.app-shell .output-field-detail p {
+  margin: 0;
   color: var(--ink-2);
   font-size: 9px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
-.app-shell .output-field-list span i {
+.app-shell .output-field-detail span {
   color: var(--muted);
-  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.4;
 }
 
 .app-shell .analysis-config-error {
@@ -1222,15 +1256,29 @@
   font-size: 9px;
 }
 
-.app-shell .field-review-body .output-field-list > div {
+.app-shell .field-review-body .output-field-group {
+  gap: 6px;
+}
+
+.app-shell .field-review-body .output-field-group h4 {
+  color: var(--ink-2);
+  font-size: 10px;
+}
+
+.app-shell .field-review-body .output-field-row {
   grid-template-columns: minmax(150px, .9fr) minmax(180px, 1.1fr);
   gap: 14px;
   padding: 11px 0;
 }
 
-.app-shell .field-review-body .output-field-list code,
-.app-shell .field-review-body .output-field-list span {
+.app-shell .field-review-body .output-field-identity strong,
+.app-shell .field-review-body .output-field-detail p {
   font-size: 11px;
+}
+
+.app-shell .field-review-body .output-field-identity code,
+.app-shell .field-review-body .output-field-detail span {
+  font-size: 9px;
 }
 
 .app-shell .custom-extraction-fields label {
@@ -3126,7 +3174,7 @@
     grid-column: 1 / -1;
   }
 
-  .app-shell .field-review-body .output-field-list > div {
+  .app-shell .field-review-body .output-field-row {
     grid-template-columns: minmax(112px, .9fr) minmax(0, 1.1fr);
     gap: 10px;
   }

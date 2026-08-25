@@ -4,7 +4,7 @@
 
 **Goal:** Make every quick addition and confirmed JSON field understandable before a video analysis starts.
 
-**Architecture:** Keep the existing prompt-first workflow and JSON editor. Add a small client-side schema summarizer for JSON examples, render its field paths, meanings, and value types inline in the form, and expose each suggestion's scope without relying on hover.
+**Architecture:** Keep the existing prompt-first workflow and JSON editor. Generate the JSON example and path-matched human explanations in one provider call, persist those explanations with the browser draft, and render them by origin before confirmation. Keep the client-side schema summarizer as a safe fallback for manually edited or legacy JSON.
 
 **Tech Stack:** React 19, TypeScript, CSS, Vitest
 
@@ -54,3 +54,38 @@
 **Step 3:** Launch the local interface, exercise empty and configured field states, and inspect desktop and mobile screenshots.
 
 **Step 4:** Fix any visual or interaction regressions before delivery.
+
+### Task 4: Generate authoritative field explanations
+
+**Files:**
+- Modify: `src/server/analysis-spec-ai.ts`
+- Modify: `src/server/analysis-spec-ai.test.ts`
+- Modify: `src/server/index.ts`
+- Modify: `docs/API.md`
+- Modify: `docs/API.zh-CN.md`
+
+**Step 1:** Write failing parser and prompt tests requiring one explanation for every output-schema leaf, including localized label, concrete description, and `request` or `addition` origin.
+
+**Step 2:** Update the generation prompt to keep the user's request and quick additions separate, require every explicit request item, and return explanations in the requested interface language.
+
+**Step 3:** Validate generated paths against the actual JSON example and reject missing, duplicate, or extra explanations as invalid provider output.
+
+**Step 4:** Accept optional quick-addition instructions in the HTTP endpoint without breaking existing instruction-only callers, and document the expanded request and response.
+
+### Task 5: Persist and present explanation metadata
+
+**Files:**
+- Modify: `src/client/analysis-config.ts`
+- Modify: `src/client/analysis-config.test.ts`
+- Modify: `src/client/App.tsx`
+- Modify: `src/client/atelier-public.css`
+
+**Step 1:** Write failing storage tests for sanitized optional field explanations and backward-compatible version-1 drafts.
+
+**Step 2:** Keep generated explanations with the candidate and persist them only after final field confirmation.
+
+**Step 3:** Match explanations to current schema paths, discard stale metadata after manual edits, and retain the existing name-based fallback for unmatched fields.
+
+**Step 4:** Group the review into “From your request” and “From quick additions”, showing the AI label, concrete explanation, path, and value type.
+
+**Step 5:** Run focused server/client tests, typecheck, build, then verify a real generation and responsive review flow in the browser.

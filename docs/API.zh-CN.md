@@ -10,24 +10,32 @@ Koma 的分析任务是异步的。提交视频后轮询任务，完成后既可
 curl -X POST http://localhost:3000/api/analysis-spec/generate \
   -H 'content-type: application/json' \
   -d '{
-    "instruction": "提取所有商品、价格和首次出现时间",
+    "instruction": "识别车牌，输出城市和省份",
+    "additions": ["附上判断依据和首次出现时间"],
     "lang": "zh"
   }'
 ```
 
-这个请求不会创建任务，也不会分析视频。返回的 `outputSchema` 一定是对象或数组，可以先检查、编辑，再提交给 `/api/analyze/url` 或 `/api/analyze/upload`：
+这个请求不会创建任务，也不会分析视频。返回的 `outputSchema` 一定是对象或数组，可以先检查、编辑，再提交给 `/api/analyze/url` 或 `/api/analyze/upload`。`fieldDescriptions` 会用指定语言解释每个叶子字段，并标明它来自用户原始要求还是快速补充：
 
 ```json
 {
   "outputSchema": {
-    "products": [
-      { "name": "string", "price": 0, "atMs": 0 }
+    "plates": [
+      { "plateNumber": "string", "city": "string", "province": "string", "evidence": "string", "atMs": 0 }
     ]
-  }
+  },
+  "fieldDescriptions": [
+    { "path": "plates[].plateNumber", "label": "车牌号码", "description": "视频中识别到的完整车牌号码", "source": "request" },
+    { "path": "plates[].city", "label": "所属城市", "description": "根据已识别车牌推断的城市", "source": "request" },
+    { "path": "plates[].province", "label": "所属省份", "description": "根据已识别车牌推断的省份", "source": "request" },
+    { "path": "plates[].evidence", "label": "判断依据", "description": "支持本次识别结果的画面证据", "source": "addition" },
+    { "path": "plates[].atMs", "label": "首次出现时间", "description": "车牌首次出现的时间，单位为毫秒", "source": "addition" }
+  ]
 }
 ```
 
-`instruction` 必填，最长 4000 字符；`lang` 可省略，仅支持 `en` 或 `zh`。请求体上限为 16 KiB，成功响应包含 `cache-control: no-store`。
+`instruction` 或 `additions` 至少要有一项非空内容，合计最长 4000 字符；`additions` 最多接受 8 个字符串。每个 JSON 叶子字段必须有且仅有一条同路径说明，不接受缺失、重复或多余路径。`lang` 可省略，仅支持 `en` 或 `zh`。请求体上限为 16 KiB，成功响应包含 `cache-control: no-store`。
 
 只有配置了真实视觉 Provider 及其凭据时，这个接口才可用。它与视频分析共用演示额度，无效请求会在消耗额度前被拒绝。无效输入返回 `400`，请求体过大返回 `413`，演示额度耗尽返回 `429`，Provider 调用失败或返回无效 JSON 结构返回 `502`，视觉 Provider 不可用或未配置返回 `503`。
 

@@ -10,24 +10,32 @@ Use the configured vision provider to turn a natural-language request into an ed
 curl -X POST http://localhost:3000/api/analysis-spec/generate \
   -H 'content-type: application/json' \
   -d '{
-    "instruction": "Extract every product, price, and first appearance time",
+    "instruction": "Recognize license plates and return their city and province",
+    "additions": ["Include supporting evidence and first appearance time"],
     "lang": "en"
   }'
 ```
 
-The response is not a job and contains no video analysis. `outputSchema` is always an object or array suitable for review, editing, and later use with `/api/analyze/url` or `/api/analyze/upload`:
+The response is not a job and contains no video analysis. `outputSchema` is always an object or array suitable for review, editing, and later use with `/api/analyze/url` or `/api/analyze/upload`. `fieldDescriptions` explains every leaf field in the requested language and identifies whether it came from the primary request or a quick addition:
 
 ```json
 {
   "outputSchema": {
-    "products": [
-      { "name": "string", "price": 0, "atMs": 0 }
+    "plates": [
+      { "plateNumber": "string", "city": "string", "province": "string", "evidence": "string", "atMs": 0 }
     ]
-  }
+  },
+  "fieldDescriptions": [
+    { "path": "plates[].plateNumber", "label": "Plate number", "description": "The complete license plate recognized in the video", "source": "request" },
+    { "path": "plates[].city", "label": "City", "description": "The city inferred from the recognized plate", "source": "request" },
+    { "path": "plates[].province", "label": "Province", "description": "The province inferred from the recognized plate", "source": "request" },
+    { "path": "plates[].evidence", "label": "Evidence", "description": "The visual evidence supporting the recognition", "source": "addition" },
+    { "path": "plates[].atMs", "label": "First appearance", "description": "The first time the plate appears, in milliseconds", "source": "addition" }
+  ]
 }
 ```
 
-`instruction` is required and limited to 4,000 characters. `lang` is optional and accepts `en` or `zh`. The request body is limited to 16 KiB, and successful responses include `cache-control: no-store`.
+At least one non-empty `instruction` or `additions` item is required; their combined content is limited to 4,000 characters. `additions` accepts up to eight strings. Every schema leaf has exactly one matching description path, with no extra or duplicate paths. `lang` is optional and accepts `en` or `zh`. The request body is limited to 16 KiB, and successful responses include `cache-control: no-store`.
 
 The endpoint is available only when a real vision provider and its credentials are configured. It uses the same demo allowance as video analysis: invalid input is rejected before allowance is consumed. Errors are `400` for invalid input, `413` for an oversized body, `429` when the demo allowance is exhausted, `502` when the provider fails or returns an invalid JSON shape, and `503` when the vision provider is unavailable or not configured.
 

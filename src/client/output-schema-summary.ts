@@ -1,3 +1,5 @@
+import type { AnalysisFieldDescription, AnalysisFieldSource } from "./analysis-config.js";
+
 export type OutputSchemaLanguage = "en" | "zh";
 
 export interface OutputFieldSummary {
@@ -8,6 +10,17 @@ export interface OutputFieldSummary {
 
 export interface OutputSchemaSummary {
   fields: OutputFieldSummary[];
+  total: number;
+}
+
+export interface PresentedOutputField extends OutputFieldSummary {
+  label: string;
+  description?: string;
+  source?: AnalysisFieldSource;
+}
+
+export interface PresentedOutputSchemaSummary {
+  fields: PresentedOutputField[];
   total: number;
 }
 
@@ -81,6 +94,19 @@ export function summarizeOutputSchema(serialized: string, language: OutputSchema
   else visitExampleValue(parsed, "", language, allFields);
   const safeLimit = Math.max(0, visibleLimit);
   return { fields: allFields.slice(0, safeLimit), total: allFields.length };
+}
+
+export function attachFieldDescriptions(summary: OutputSchemaSummary, descriptions: AnalysisFieldDescription[] = []): PresentedOutputSchemaSummary {
+  const byPath = new Map(descriptions.map((description) => [description.path, description]));
+  return {
+    total: summary.total,
+    fields: summary.fields.map((field) => {
+      const description = byPath.get(field.path);
+      return description
+        ? { ...field, label: description.label, description: description.description, source: description.source }
+        : { ...field, label: field.meaning };
+    })
+  };
 }
 
 function visitJsonSchema(schema: Record<string, unknown>, path: string, language: OutputSchemaLanguage, fields: OutputFieldSummary[]): void {

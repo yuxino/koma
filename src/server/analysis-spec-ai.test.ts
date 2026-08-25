@@ -4,7 +4,8 @@ import {
   generateAnalysisSpec,
   parseGeneratedAnalysisSpec,
   validateAnalysisSpecGenerationInstruction,
-  validateAnalysisSpecGenerationLanguage
+  validateAnalysisSpecGenerationLanguage,
+  validateAnalysisSpecGenerationRequest
 } from "./analysis-spec-ai.js";
 import type { ChatCompletionRequest } from "./chat-completion.js";
 import type { RuntimeProvider } from "./provider-runtime.js";
@@ -19,55 +20,84 @@ const provider: RuntimeProvider<VisionProvider> = {
 
 describe("parseGeneratedAnalysisSpec", () => {
   it("accepts a valid generated JSON shape", () => {
-    expect(parseGeneratedAnalysisSpec('{"outputSchema":{"items":[{"name":"string","atMs":0}]}}')).toEqual({
-      outputSchema: { items: [{ name: "string", atMs: 0 }] }
+    expect(parseGeneratedAnalysisSpec('{"outputSchema":{"items":[{"name":"string","atMs":0}]},"fieldDescriptions":[{"path":"items[].name","label":"商品名称","description":"视频中识别到的商品名称","source":"request"},{"path":"items[].atMs","label":"出现时间","description":"商品第一次出现在视频中的时间，单位为毫秒","source":"addition"}]}')).toEqual({
+      outputSchema: { items: [{ name: "string", atMs: 0 }] },
+      fieldDescriptions: [
+        { path: "items[].name", label: "商品名称", description: "视频中识别到的商品名称", source: "request" },
+        { path: "items[].atMs", label: "出现时间", description: "商品第一次出现在视频中的时间，单位为毫秒", source: "addition" }
+      ]
     });
   });
 
   it("accepts JSON inside a markdown fence", () => {
-    expect(parseGeneratedAnalysisSpec('```json\n{"outputSchema":{"people":[{"displayName":"string"}]}}\n```')).toEqual({
-      outputSchema: { people: [{ displayName: "string" }] }
+    expect(parseGeneratedAnalysisSpec('```json\n{"outputSchema":{"people":[{"displayName":"string"}]},"fieldDescriptions":[{"path":"people[].displayName","label":"人物姓名","description":"视频中出现人物的姓名或称呼","source":"request"}]}\n```')).toEqual({
+      outputSchema: { people: [{ displayName: "string" }] },
+      fieldDescriptions: [{ path: "people[].displayName", label: "人物姓名", description: "视频中出现人物的姓名或称呼", source: "request" }]
     });
   });
 
   it("joins provider content arrays before parsing", () => {
     expect(parseGeneratedAnalysisSpec([
       { type: "text", text: '{"outputSchema":{"items":' },
-      { type: "text", text: '[{"name":"string"}]}}' }
-    ])).toEqual({ outputSchema: { items: [{ name: "string" }] } });
+      { type: "text", text: '[{"name":"string"}]},"fieldDescriptions":[{"path":"items[].name","label":"Name","description":"The item name shown in the video","source":"request"}]}' }
+    ])).toEqual({
+      outputSchema: { items: [{ name: "string" }] },
+      fieldDescriptions: [{ path: "items[].name", label: "Name", description: "The item name shown in the video", source: "request" }]
+    });
   });
 
   it("rejects missing outputSchema and scalar roots as invalid upstream output", () => {
     expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"items":[]}'));
     expectInvalidOutput(() => parseGeneratedAnalysisSpec('"string"'));
-    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":"string"}'));
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":"string","fieldDescriptions":[]}'));
   });
 
   it("rejects over-complex shapes through parseAnalysisSpec", () => {
     let shape: unknown = {};
     for (let index = 0; index < 34; index += 1) shape = { nested: shape };
-    expectInvalidOutput(() => parseGeneratedAnalysisSpec(JSON.stringify({ outputSchema: shape })));
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec(JSON.stringify({ outputSchema: shape, fieldDescriptions: [] })));
   });
 
   it("requires lower-camel-case keys throughout the generated shape", () => {
-    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"display_name":"string"}}'));
-    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"DisplayName":"string"}}'));
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"display_name":"string"},"fieldDescriptions":[]}'));
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"DisplayName":"string"},"fieldDescriptions":[]}'));
+  });
+
+  it("requires exactly one description for every schema leaf", () => {
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"plateNumber":"string","province":"string"},"fieldDescriptions":[{"path":"plateNumber","label":"车牌号","description":"识别到的完整车牌号码","source":"request"}]}'));
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"plateNumber":"string"},"fieldDescriptions":[{"path":"plateNumber","label":"车牌号","description":"识别到的完整车牌号码","source":"request"},{"path":"plateNumber","label":"号码","description":"重复说明","source":"request"}]}'));
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"plateNumber":"string"},"fieldDescriptions":[{"path":"unknown","label":"未知","description":"不存在的字段","source":"request"}]}'));
+  });
+
+  it("rejects empty explanations and unknown origins", () => {
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"plateNumber":"string"},"fieldDescriptions":[{"path":"plateNumber","label":"","description":"识别到的完整车牌号码","source":"request"}]}'));
+    expectInvalidOutput(() => parseGeneratedAnalysisSpec('{"outputSchema":{"plateNumber":"string"},"fieldDescriptions":[{"path":"plateNumber","label":"车牌号","description":"识别到的完整车牌号码","source":"model"}]}'));
   });
 });
 
 describe("generateAnalysisSpec", () => {
   it("preserves the untrusted request and asks for placeholders, not invented values", async () => {
-    const instruction = "  提取人物、商品和时间点，不要改写我的要求。\n";
+    const instruction = "  识别车牌号、省份和城市，不要改写我的要求。\n";
     let captured: ChatCompletionRequest | undefined;
-    const result = await generateAnalysisSpec({ instruction, provider }, {
+    const result = await generateAnalysisSpec({
+      instruction,
+      additions: ["为用户要求的字段补充依据和首次出现时间。"],
+      language: "zh",
+      provider
+    }, {
       requestChatCompletion: async (request) => {
         captured = request;
-        return '{"outputSchema":{"people":[{"displayName":"string"}],"atMs":0}}';
+        return '{"outputSchema":{"plates":[{"plateNumber":"string","province":"string","city":"string","evidence":"string","atMs":0}]},"fieldDescriptions":[{"path":"plates[].plateNumber","label":"车牌号码","description":"从视频画面中识别到的完整车牌号码","source":"request"},{"path":"plates[].province","label":"登记省份","description":"根据车牌简称判断的车辆登记省份","source":"request"},{"path":"plates[].city","label":"登记城市","description":"根据车牌字母代码判断的车辆登记城市","source":"request"},{"path":"plates[].evidence","label":"判断依据","description":"支持车牌识别结果的画面文字或视觉依据","source":"addition"},{"path":"plates[].atMs","label":"首次出现时间","description":"该车牌首次出现在视频中的时间，单位为毫秒","source":"addition"}]}';
       }
     });
 
-    expect(result).toEqual({ outputSchema: { people: [{ displayName: "string" }], atMs: 0 } });
+    expect(result.outputSchema).toEqual({ plates: [{ plateNumber: "string", province: "string", city: "string", evidence: "string", atMs: 0 }] });
+    expect(result.fieldDescriptions).toHaveLength(5);
     expect(captured?.userContent).toContain(instruction);
+    expect(captured?.userContent).toContain("为用户要求的字段补充依据和首次出现时间");
+    expect(captured?.userContent).toContain("用户明确要求");
+    expect(captured?.userContent).toContain("快速补充");
+    expect(captured?.userContent).toContain("简体中文");
     expect(captured?.userContent).toContain("不可信数据");
     expect(captured?.userContent).toContain("lowerCamelCase");
     expect(captured?.userContent).toContain('字符串使用 "string"');
@@ -105,6 +135,19 @@ describe("generateAnalysisSpec", () => {
     expect(validateAnalysisSpecGenerationLanguage("en")).toBe("en");
     expect(validateAnalysisSpecGenerationLanguage("zh")).toBe("zh");
     expect(() => validateAnalysisSpecGenerationLanguage("ja")).toThrowError(AnalysisSpecAiError);
+  });
+
+  it("keeps the primary request separate from optional quick additions", () => {
+    expect(validateAnalysisSpecGenerationRequest("识别车牌", ["附上时间点", "  "])).toEqual({
+      instruction: "识别车牌",
+      additions: ["附上时间点"]
+    });
+    expect(validateAnalysisSpecGenerationRequest("", ["生成双语字幕"])).toEqual({
+      instruction: "",
+      additions: ["生成双语字幕"]
+    });
+    expect(() => validateAnalysisSpecGenerationRequest("", [])).toThrowError(AnalysisSpecAiError);
+    expect(() => validateAnalysisSpecGenerationRequest("要求", "补充")).toThrowError(AnalysisSpecAiError);
   });
 });
 

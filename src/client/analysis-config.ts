@@ -9,11 +9,20 @@ export const ANALYSIS_CONFIG_STORAGE_KEY = "koma-analysis-config";
 export const ANALYSIS_CONFIG_VERSION = 1 as const;
 export const ANALYSIS_SUGGESTION_IDS = ["extract", "subtitles", "report"] as const;
 export type AnalysisSuggestionId = typeof ANALYSIS_SUGGESTION_IDS[number];
+export type AnalysisFieldSource = "request" | "addition";
+
+export interface AnalysisFieldDescription {
+  path: string;
+  label: string;
+  description: string;
+  source: AnalysisFieldSource;
+}
 
 export interface AnalysisDraft {
   instruction: string;
   suggestionIds: string[];
   outputSchema: string;
+  fieldDescriptions?: AnalysisFieldDescription[];
 }
 
 export interface StoredAnalysisConfig {
@@ -123,10 +132,12 @@ function normalizeDraft(value: unknown): AnalysisDraft | undefined {
     seen.add(candidate);
     suggestionIds.push(candidate);
   }
+  const fieldDescriptions = normalizeFieldDescriptions(value.fieldDescriptions);
   return {
     instruction: value.instruction.slice(0, MAX_ANALYSIS_INSTRUCTION_CHARS),
     suggestionIds,
-    outputSchema: value.outputSchema.slice(0, MAX_OUTPUT_SCHEMA_CHARS)
+    outputSchema: value.outputSchema.slice(0, MAX_OUTPUT_SCHEMA_CHARS),
+    ...(fieldDescriptions.length ? { fieldDescriptions } : {})
   };
 }
 
@@ -134,8 +145,29 @@ function cloneDraft(value: AnalysisDraft): AnalysisDraft {
   return {
     instruction: value.instruction,
     suggestionIds: [...value.suggestionIds],
-    outputSchema: value.outputSchema
+    outputSchema: value.outputSchema,
+    ...(value.fieldDescriptions ? { fieldDescriptions: value.fieldDescriptions.map((field) => ({ ...field })) } : {})
   };
+}
+
+function normalizeFieldDescriptions(value: unknown): AnalysisFieldDescription[] {
+  if (!Array.isArray(value)) return [];
+  const descriptions: AnalysisFieldDescription[] = [];
+  const seenPaths = new Set<string>();
+  for (const candidate of value.slice(0, 64)) {
+    if (!isRecord(candidate)
+      || typeof candidate.path !== "string"
+      || typeof candidate.label !== "string"
+      || typeof candidate.description !== "string"
+      || (candidate.source !== "request" && candidate.source !== "addition")) continue;
+    const path = candidate.path.trim().slice(0, 300);
+    const label = candidate.label.trim().slice(0, 80);
+    const description = candidate.description.trim().slice(0, 300);
+    if (!path || !label || !description || seenPaths.has(path)) continue;
+    seenPaths.add(path);
+    descriptions.push({ path, label, description, source: candidate.source });
+  }
+  return descriptions;
 }
 
 function emptyStoredConfig(): StoredAnalysisConfig {

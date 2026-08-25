@@ -125,6 +125,28 @@ describe("loadAnalysisConfig", () => {
 
     expect(loadAnalysisConfig(storage)).toEqual({ version: 1, draft: draft() });
   });
+
+  it("persists sanitized optional field explanations while keeping legacy drafts valid", () => {
+    const storage = new MemoryStorage();
+    const legacy = draft();
+    storage.setItem(ANALYSIS_CONFIG_STORAGE_KEY, JSON.stringify({ version: 1, draft: legacy }));
+    expect(loadAnalysisConfig(storage)).toEqual({ version: 1, draft: legacy });
+
+    const explained = draft({
+      fieldDescriptions: [
+        { path: "plates[].plateNumber", label: "车牌号码", description: "视频中识别到的完整车牌号码", source: "request" },
+        { path: "plates[].atMs", label: "首次出现时间", description: "车牌首次出现的时间，单位为毫秒", source: "addition" },
+        { path: "plates[].atMs", label: "重复", description: "应该被过滤", source: "addition" },
+        { path: "", label: "无效", description: "无效路径", source: "request" }
+      ]
+    });
+    updateAnalysisDraft(storage, explained);
+
+    expect(loadAnalysisConfig(storage).draft.fieldDescriptions).toEqual([
+      { path: "plates[].plateNumber", label: "车牌号码", description: "视频中识别到的完整车牌号码", source: "request" },
+      { path: "plates[].atMs", label: "首次出现时间", description: "车牌首次出现的时间，单位为毫秒", source: "addition" }
+    ]);
+  });
 });
 
 describe("analysis configuration updates", () => {
