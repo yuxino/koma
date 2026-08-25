@@ -12,6 +12,7 @@ import {
 } from "./analysis-config.js";
 import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
+import { summarizeOutputSchema } from "./output-schema-summary.js";
 import { progressStepStates } from "./progress.js";
 
 type Language = "en" | "zh";
@@ -82,16 +83,20 @@ const copy = {
     presetsHint: "Describe the result in plain language. Koma can turn it into editable JSON.",
     analysisRequirement: "Tell Koma what you need",
     instructionPlaceholder: "For example: List every product, its price, supporting quote, and first appearance time.",
-    quickSuggestions: "Quick additions · choose any",
-    buildJson: "Create JSON with AI",
-    updateJson: "Regenerate JSON",
-    buildingJson: "Creating JSON…",
-    editJson: "Edit JSON",
-    defineJson: "Write JSON manually",
-    jsonReady: "A JSON shape is set",
-    jsonAutomatic: "AI will choose the JSON shape",
-    jsonAutomaticHint: "You can analyze now, or create the structure first.",
-    jsonReadyHint: "Review the generated fields before analysis.",
+    quickSuggestions: "Quick additions · see what each one adds",
+    buildJson: "Generate field structure",
+    updateJson: "Regenerate fields",
+    buildingJson: "Generating fields…",
+    editJson: "View / edit JSON",
+    defineJson: "Define fields manually",
+    jsonReady: "Output fields confirmed",
+    jsonAutomatic: "Output fields are not defined",
+    jsonAutomaticHint: "Koma will choose them during analysis. Generate them first if you want to review the exact fields.",
+    jsonReadyHint: "These are the fields Koma will return for this analysis.",
+    outputFields: "Fields this analysis will return",
+    outputFieldsCount: "fields",
+    outputFieldsMore: "more in the JSON editor",
+    outputFieldsEmpty: "This structure does not contain any visible fields yet.",
     jsonValid: "Valid JSON",
     jsonInvalid: "JSON needs attention",
     jsonEmpty: "Empty · AI decides automatically",
@@ -255,16 +260,20 @@ const copy = {
     presetsHint: "直接说结果要包含什么，Koma 可以先帮你整理成可编辑的 JSON。",
     analysisRequirement: "告诉 Koma 你想要什么",
     instructionPlaceholder: "例如：列出所有商品、价格、相关原话，以及第一次出现的时间。",
-    quickSuggestions: "快速补充 · 可以多选",
-    buildJson: "让 AI 整理 JSON",
-    updateJson: "重新生成 JSON",
-    buildingJson: "正在整理 JSON…",
-    editJson: "编辑 JSON",
-    defineJson: "手动写 JSON",
-    jsonReady: "已经定义 JSON 结构",
-    jsonAutomatic: "将由 AI 自动整理 JSON",
-    jsonAutomaticHint: "可以直接开始分析，也可以先生成结构确认。",
-    jsonReadyHint: "分析前可以检查、修改字段和层级。",
+    quickSuggestions: "快速补充 · 看清每项会增加什么",
+    buildJson: "生成字段结构",
+    updateJson: "重新生成字段",
+    buildingJson: "正在生成字段…",
+    editJson: "查看 / 编辑 JSON",
+    defineJson: "手动定义字段",
+    jsonReady: "输出字段已确认",
+    jsonAutomatic: "尚未定义输出字段",
+    jsonAutomaticHint: "直接分析时将由 Koma 临时决定；如需确认具体字段，请先生成字段结构。",
+    jsonReadyHint: "Koma 会按照下面这些字段返回本次分析结果。",
+    outputFields: "本次将生成的字段",
+    outputFieldsCount: "个字段",
+    outputFieldsMore: "个字段可在 JSON 编辑器中查看",
+    outputFieldsEmpty: "这份结构暂时没有可展示的字段。",
     jsonValid: "JSON 格式正确",
     jsonInvalid: "JSON 需要修改",
     jsonEmpty: "留空 · 分析时由 AI 决定",
@@ -500,6 +509,7 @@ function App() {
   const suggestionInstructionLength = effectiveAnalysisInstruction("", suggestionIds, language).length;
   const instructionLimit = Math.max(0, MAX_ANALYSIS_INSTRUCTION_CHARS - suggestionInstructionLength - (suggestionInstructionLength ? 2 : 0));
   const hasOutputSchema = Boolean(outputSchema.trim());
+  const outputFieldSummary = summarizeOutputSchema(outputSchema, language);
   const currentAnalysisDraft: AnalysisDraft = { instruction, suggestionIds, outputSchema };
 
   useEffect(() => {
@@ -799,15 +809,22 @@ function App() {
               <span>{t.quickSuggestions}</span>
               <div>{analysisSuggestions(language).map((suggestion) => {
                 const selected = suggestionIds.includes(suggestion.id);
-                return <button key={suggestion.id} type="button" disabled={generatingSchema} className={selected ? "selected" : ""} aria-pressed={selected} title={suggestion.description} onClick={() => toggleSuggestion(suggestion.id)}><i aria-hidden="true">{selected ? "✓" : "+"}</i>{suggestion.label}</button>;
+                return <button key={suggestion.id} type="button" disabled={generatingSchema} className={selected ? "selected" : ""} aria-pressed={selected} aria-label={`${suggestion.label}: ${suggestion.description}`} onClick={() => toggleSuggestion(suggestion.id)}><i aria-hidden="true">{selected ? "✓" : "+"}</i><span><strong>{suggestion.label}</strong><small>{suggestion.description}</small></span></button>;
               })}</div>
             </div>
             <div className={`json-workflow ${hasOutputSchema ? "configured" : ""}`}>
-              <div className="json-workflow-status"><span aria-hidden="true" /><div><strong>{hasOutputSchema ? t.jsonReady : t.jsonAutomatic}</strong><small>{hasOutputSchema ? t.jsonReadyHint : t.jsonAutomaticHint}</small></div></div>
-              <div className="json-workflow-actions">
-                <button className="json-ai-button" type="button" disabled={generatingSchema} onClick={generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.buildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
-                <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
+              <div className="json-workflow-main">
+                <div className="json-workflow-status"><span aria-hidden="true" /><div><strong>{hasOutputSchema ? t.jsonReady : t.jsonAutomatic}</strong><small>{hasOutputSchema ? t.jsonReadyHint : t.jsonAutomaticHint}</small></div></div>
+                <div className="json-workflow-actions">
+                  <button className="json-ai-button" type="button" disabled={generatingSchema} onClick={generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.buildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
+                  <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
+                </div>
               </div>
+              {hasOutputSchema && <div className="output-field-summary" aria-label={t.outputFields}>
+                <div className="output-field-summary-head"><strong>{t.outputFields}</strong><span>{outputFieldSummary.total} {t.outputFieldsCount}</span></div>
+                {outputFieldSummary.fields.length ? <div className="output-field-list">{outputFieldSummary.fields.map((field) => <div key={field.path}><code title={field.path}>{field.path}</code><span>{field.meaning}<i aria-hidden="true">·</i>{field.type}</span></div>)}</div> : <p>{t.outputFieldsEmpty}</p>}
+                {outputFieldSummary.total > outputFieldSummary.fields.length && <p>+{outputFieldSummary.total - outputFieldSummary.fields.length} {t.outputFieldsMore}</p>}
+              </div>}
             </div>
             {schemaActionError && <p className="analysis-config-error" role="alert">{schemaActionError}</p>}
             <div className="config-memory"><span><i aria-hidden="true" />{configNotice || t.configAutosaved}</span><div><button type="button" disabled={generatingSchema} onClick={saveCurrentAsDefault}>{t.saveDefault}</button><button type="button" disabled={generatingSchema || !defaultConfig} onClick={restoreSavedDefault}>{t.restoreDefault}</button></div></div>

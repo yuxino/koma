@@ -701,16 +701,17 @@
 
 .app-shell .analysis-suggestions button {
   display: inline-flex;
-  min-height: 34px;
+  min-height: 48px;
+  min-width: 0;
+  flex: 1 1 160px;
   align-items: center;
   gap: 7px;
-  padding: 0 10px 0 8px;
+  padding: 7px 10px 7px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--ink-2);
   background: var(--surface-strong);
-  font-size: 10px;
-  font-weight: 680;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -738,11 +739,36 @@
   line-height: 1;
 }
 
-.app-shell .json-workflow {
-  display: flex;
+.app-shell .analysis-suggestions button > span {
+  display: grid;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
+  gap: 2px;
+}
+
+.app-shell .analysis-suggestions button strong {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.app-shell .analysis-suggestions button small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .analysis-suggestions button.selected small {
+  color: var(--ink-2);
+}
+
+.app-shell .json-workflow {
+  display: grid;
+  min-width: 0;
   gap: 16px;
   margin-top: 13px;
   padding: 12px 13px;
@@ -754,6 +780,14 @@
 .app-shell .json-workflow.configured {
   border-color: var(--line-strong);
   background: var(--surface-strong);
+}
+
+.app-shell .json-workflow-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .app-shell .json-workflow-status {
@@ -832,6 +866,79 @@
 .app-shell .json-workflow-actions .json-ai-button:hover {
   color: var(--surface-strong);
   background: #2d2c29;
+}
+
+.app-shell .output-field-summary {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+.app-shell .output-field-summary-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.app-shell .output-field-summary-head strong {
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.app-shell .output-field-summary-head span,
+.app-shell .output-field-summary > p {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.app-shell .output-field-list {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 18px;
+}
+
+.app-shell .output-field-list > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(88px, .8fr) minmax(112px, 1.2fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell .output-field-list code {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .output-field-list span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--ink-2);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.app-shell .output-field-list span i {
+  color: var(--muted);
+  font-style: normal;
 }
 
 .app-shell .analysis-config-error {
@@ -2876,10 +2983,14 @@
     font-size: 16px;
   }
 
-  .app-shell .json-workflow {
+  .app-shell .json-workflow-main {
     align-items: stretch;
     flex-direction: column;
     gap: 11px;
+  }
+
+  .app-shell .output-field-list {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .app-shell .json-workflow-actions {
