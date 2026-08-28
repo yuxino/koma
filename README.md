@@ -1,19 +1,16 @@
-<div align="center">
-  <img src="docs/images/koma-readme-icon.png" width="112" alt="Koma icon">
-  <h1>Koma</h1>
-  <p>Turn video into useful data.</p>
-  <p><a href="README.zh-CN.md">简体中文</a></p>
-</div>
+# Koma
 
-Koma turns a video into a replayable result with summaries, chapters, subtitles, key frames, structured data, and downloadable files.
+[简体中文](README.zh-CN.md)
 
-## Features
+Koma is a self-hosted AI video understanding app that turns local files and public video links into replayable results with summaries, chapters, subtitles, key frames, custom structured data, and downloadable text files.
+
+## Core capabilities
 
 - Upload a local video or paste a Douyin/Bilibili link. Install `yt-dlp` for YouTube and more sites.
-- Combine audio and key frames into summaries, chapters, tags, subtitles, and scene captions.
-- Jump from any chapter, tag, subtitle, or frame to the matching moment.
-- Describe the data you need, let AI shape editable JSON, and reuse the saved browser configuration. API/CLI clients can still export JSON, CSV, Markdown, SRT, or TXT.
-- Save replayable jobs, manage your own history, and configure providers from `/admin`.
+- Combine speech and key frames into summaries, chapters, tags, subtitles, and frame descriptions.
+- Jump from a chapter, tag, subtitle, or frame to the matching moment.
+- Describe the fields you need, review the editable JSON structure before analysis, save it in the browser, and request JSON, CSV, Markdown, SRT, or TXT output.
+- Reopen or delete jobs submitted from the same browser. With `ADMIN_PASSWORD` configured, `/admin` manages providers, encrypted API keys, and all jobs.
 
 ## Quick start
 
@@ -26,11 +23,14 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-Without API keys, Koma runs in mock mode. AI-built JSON shapes, custom extraction, and generated files require a real vision provider. See [Configuration](docs/CONFIGURATION.md).
+Without provider keys, Koma uses mock output instead of real transcription or vision analysis. Configure an ASR provider for real subtitles and a vision provider for real summaries, chapters, frame descriptions, custom JSON, and generated files. See [Configuration](docs/CONFIGURATION.md).
 
-## Data and privacy
+## Privacy and limits
 
-Koma sends audio to the configured speech provider and key frames plus transcript context to the configured vision provider. Videos, frames, results, and generated files remain stored for replay until the submitting browser or an administrator deletes the job. Anyone with the unguessable replay link can view it; clearing site data or switching browsers removes access to that browser's “My jobs” controls. See [Administration](docs/ADMIN.md) for the full data boundary.
+- Koma sends audio to the configured speech provider, and key frames plus transcript context to the configured vision provider.
+- Videos, frames, results, and generated files remain stored until the submitting browser or an administrator deletes the job. Anyone with the unguessable replay link can view it; clearing site data or switching browsers removes access to that browser's “My jobs” controls.
+- Uploads default to 500 MB and 15 minutes. Login-only and subscription-only videos are not supported; fallback site support depends on the installed `yt-dlp` version and each site's anti-bot behavior.
+- Without `ADMIN_PASSWORD`, `/admin` is disabled while AI JSON generation and upload/URL submission remain public. The URL importer is not a complete SSRF boundary; use an egress policy or trusted URL allowlist before exposing submission to untrusted users. See [Administration](docs/ADMIN.md).
 
 ## CLI
 
