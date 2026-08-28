@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
 import {
   ANALYSIS_SUGGESTION_IDS,
   MAX_ANALYSIS_INSTRUCTION_CHARS,
@@ -17,6 +17,7 @@ import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
 import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
 import { progressStepStates } from "./progress.js";
+import "./atelier-public.css";
 
 type Language = "en" | "zh";
 
@@ -87,7 +88,6 @@ const copy = {
     quickSuggestions: "Quick additions · see what each one adds",
     buildJson: "Generate field structure",
     updateJson: "Regenerate fields",
-    buildingJson: "Generating fields…",
     cancelBuildingJson: "Cancel generation",
     editJson: "View / edit JSON",
     reviewJson: "Review fields",
@@ -269,7 +269,6 @@ const copy = {
     quickSuggestions: "快速补充 · 看清每项会增加什么",
     buildJson: "生成字段结构",
     updateJson: "重新生成字段",
-    buildingJson: "正在生成字段…",
     cancelBuildingJson: "取消生成",
     editJson: "查看 / 编辑 JSON",
     reviewJson: "重新确认字段",
@@ -480,8 +479,13 @@ function parseFieldDescriptions(value: unknown, errorMessage: string): AnalysisF
 }
 
 function formatDate(timestamp: number, language: Language): string {
-  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
+  return dateFormatters[language].format(new Date(timestamp));
 }
+
+const dateFormatters: Record<Language, Intl.DateTimeFormat> = {
+  en: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+  zh: new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+};
 
 type GlyphName = "arrow" | "clock" | "frame" | "info" | "link" | "play" | "spark" | "trash" | "upload" | "voice" | "cc" | "zoom" | "settings";
 function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
@@ -560,7 +564,7 @@ function App() {
   const hasOutputSchema = Boolean(outputSchema.trim());
   const currentAnalysisRequestKey = analysisRequestKey(instruction, suggestionIds);
   const outputSchemaNeedsReview = hasOutputSchema && outputSchemaRequestKey !== currentAnalysisRequestKey;
-  const outputFieldSummary = summarizeOutputSchema(outputSchema, language);
+  const outputFieldSummary = useMemo(() => summarizeOutputSchema(outputSchema, language), [outputSchema, language]);
   const currentAnalysisDraft: AnalysisDraft = {
     instruction,
     suggestionIds,
@@ -947,7 +951,7 @@ function App() {
             <span>{t.flowVideo}</span><i aria-hidden="true" /><span>{t.flowSignals}</span><i aria-hidden="true" /><strong>{t.flowOutput}</strong>
           </div>
           <div className="hero-character">
-            <img className="hero-character-portrait" src="/koma-mascot.png" alt="" />
+            <img className="hero-character-portrait" src="/koma-mascot.png" alt="" fetchPriority="high" />
             <div className="hero-character-copy"><span>FRAME ASSISTANT · 00:00:01</span><strong>{t.mascotCue}</strong><small>{t.mascotCueText}</small></div>
           </div>
         </div>
@@ -1227,10 +1231,19 @@ function AdvancedSettingsDialog({ language, outputSchema, fieldDescriptions, ini
     try { parseOutputSchema(draftSchema, t.invalidSchema); }
     catch { dialogError = t.invalidSchema; }
   }
-  const completeFieldSummary = summarizeOutputSchema(draftSchema, language, Number.MAX_SAFE_INTEGER);
+  const completeFieldSummary = useMemo(
+    () => summarizeOutputSchema(draftSchema, language, Number.MAX_SAFE_INTEGER),
+    [draftSchema, language]
+  );
   const fieldSummary: OutputSchemaSummary = { fields: completeFieldSummary.fields.slice(0, 64), total: completeFieldSummary.total };
-  const fieldTypes = new Map(completeFieldSummary.fields.map((field) => [field.path, field.type]));
-  const initialFieldTypes = new Map(summarizeOutputSchema(outputSchema, language, Number.MAX_SAFE_INTEGER).fields.map((field) => [field.path, field.type]));
+  const fieldTypes = useMemo(
+    () => new Map(completeFieldSummary.fields.map((field) => [field.path, field.type])),
+    [completeFieldSummary]
+  );
+  const initialFieldTypes = useMemo(
+    () => new Map(summarizeOutputSchema(outputSchema, language, Number.MAX_SAFE_INTEGER).fields.map((field) => [field.path, field.type])),
+    [outputSchema, language]
+  );
   const activeFieldDescriptions = fieldDescriptions.filter((field) => fieldTypes.has(field.path) && fieldTypes.get(field.path) === initialFieldTypes.get(field.path));
   const isReview = view === "review";
 

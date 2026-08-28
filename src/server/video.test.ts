@@ -1,12 +1,12 @@
-import { createReadStream, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import ffmpegStatic from "ffmpeg-static";
-import { createAudioSegmentMetadata, parseShowinfoTimes, probeRemoteVideoDuration, runCommand } from "./video.js";
+import { createAudioSegmentMetadata, extractFrames, parseShowinfoTimes, probeRemoteVideoDuration, runCommand } from "./video.js";
 
 const tempDirs: string[] = [];
 let probeVideoPath = "";
@@ -58,6 +58,33 @@ describe("command runner", () => {
     controller.abort();
     await expect(run).rejects.toMatchObject({ name: "AbortError" });
   }, 10_000);
+
+  it("does not spawn a process for an already-aborted signal", async () => {
+    const marker = join(tempDirs[0], "pre-aborted-command-ran");
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(runCommand(process.execPath, ["-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'spawned')`], controller.signal))
+      .rejects.toMatchObject({ name: "AbortError" });
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("does not enter uniform-frame fallback after scene extraction is aborted", async () => {
+    const outputDir = join(tempDirs[0], "aborted-frames");
+    let abortedReads = 0;
+    const signal = {
+      get aborted() {
+        abortedReads += 1;
+        return true;
+      },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    } as unknown as AbortSignal;
+
+    await expect(extractFrames("unused.mp4", outputDir, { durationMs: 1_000, signal }))
+      .rejects.toMatchObject({ name: "AbortError" });
+    expect(abortedReads).toBe(1);
+  });
 });
 
 describe("remote duration probe", () => {

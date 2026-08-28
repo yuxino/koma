@@ -145,7 +145,7 @@ export async function readJobOwner(jobId: string): Promise<string | null> {
 export async function listJobHistory(limit = 100): Promise<JobHistoryRecord[]> {
   await initializeDatabase();
   const safeLimit = Math.min(500, Math.max(1, Math.floor(limit)));
-  const sql = `SELECT ${JOB_COLUMNS.join(", ")} FROM koma_jobs ORDER BY created_at DESC LIMIT ?`;
+  const sql = `SELECT ${HISTORY_COLUMNS.join(", ")} FROM koma_jobs ORDER BY created_at DESC LIMIT ?`;
   const rows = databaseDriver() === "mysql"
     ? (await mysqlPool!.query<RowDataPacket[]>(sql, [safeLimit]))[0] as Array<Record<string, unknown>>
     : sqliteDatabase!.prepare(sql).all(safeLimit) as Array<Record<string, unknown>>;
@@ -156,7 +156,7 @@ export async function listOwnedJobHistory(ownerId: string, limit = 100): Promise
   await initializeDatabase();
   if (!/^[a-f0-9]{64}$/.test(ownerId)) return [];
   const safeLimit = Math.min(200, Math.max(1, Math.floor(limit)));
-  const selectedColumns = JOB_COLUMNS.map((column) => `j.${column}`).join(", ");
+  const selectedColumns = HISTORY_COLUMNS.map((column) => `j.${column}`).join(", ");
   const sql = `
     SELECT ${selectedColumns}
     FROM koma_jobs j
@@ -203,6 +203,12 @@ const JOB_COLUMNS = [
   "analysis_spec_json", "result_json", "asr_provider", "asr_model", "vision_provider", "vision_model",
   "created_at", "updated_at", "completed_at", "storage_prefix", "input_object_key", "input_mime_type",
   "media_available", "error"
+] as const;
+
+const HISTORY_COLUMNS = [
+  "id", "source", "title", "status", "stage", "percent", "detail", "language",
+  "asr_provider", "asr_model", "vision_provider", "vision_model", "created_at", "updated_at",
+  "completed_at", "storage_prefix", "media_available", "error"
 ] as const;
 
 async function initializeSelectedDatabase(): Promise<void> {
@@ -329,6 +335,17 @@ function jobValues(record: PersistedJobRecord): Array<string | number | null> {
 }
 
 function normalizeJobRow(row: Record<string, unknown>): PersistedJobRecord {
+  const history = historyFromRow(row);
+  return {
+    ...history,
+    analysisSpec: parseJson(row.analysis_spec_json, {}),
+    result: row.result_json == null ? null : parseJson(row.result_json, null),
+    inputObjectKey: typeof row.input_object_key === "string" ? row.input_object_key : null,
+    inputMimeType: typeof row.input_mime_type === "string" ? row.input_mime_type : null
+  };
+}
+
+function historyFromRow(row: Record<string, unknown>): JobHistoryRecord {
   return {
     id: String(row.id),
     source: row.source === "url" ? "url" : "upload",
@@ -338,8 +355,6 @@ function normalizeJobRow(row: Record<string, unknown>): PersistedJobRecord {
     percent: Number(row.percent),
     detail: String(row.detail),
     language: row.language === "en" ? "en" : "zh",
-    analysisSpec: parseJson(row.analysis_spec_json, {}),
-    result: row.result_json == null ? null : parseJson(row.result_json, null),
     asrProvider: String(row.asr_provider),
     asrModel: String(row.asr_model),
     visionProvider: String(row.vision_provider),
@@ -348,16 +363,9 @@ function normalizeJobRow(row: Record<string, unknown>): PersistedJobRecord {
     updatedAt: Number(row.updated_at),
     completedAt: row.completed_at == null ? null : Number(row.completed_at),
     storagePrefix: String(row.storage_prefix),
-    inputObjectKey: typeof row.input_object_key === "string" ? row.input_object_key : null,
-    inputMimeType: typeof row.input_mime_type === "string" ? row.input_mime_type : null,
     mediaAvailable: Number(row.media_available) === 1,
     error: typeof row.error === "string" ? row.error : null
   };
-}
-
-function historyFromRow(row: Record<string, unknown>): JobHistoryRecord {
-  const { analysisSpec: _analysisSpec, result: _result, inputObjectKey: _inputObjectKey, inputMimeType: _inputMimeType, ...history } = normalizeJobRow(row);
-  return history;
 }
 
 function parseJson(value: unknown, fallback: unknown): unknown {

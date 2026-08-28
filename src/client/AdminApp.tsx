@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import "./atelier-admin.css";
 
 type Language = "en" | "zh";
 type StageName = "asr" | "vision";
@@ -280,7 +281,7 @@ export default function AdminApp() {
   return <div className="admin-shell">
     <header className="site-header"><div className="header-inner"><a className="admin-brand" href="/"><img src="/koma-icon-64.png" alt="" /><span><strong>Koma</strong><small>{t.console}</small></span></a><div className="header-actions"><button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>{session?.authenticated && <button className="header-button" type="button" onClick={logout}>{t.logout}</button>}<a className="header-button" href="/">{t.back}</a></div></div></header>
     {session === null ? <main className="admin-centered"><div className="admin-loader" /></main>
-      : !session.enabled ? <main className="admin-centered"><AdminMessage icon="lock" title={t.disabled} text={t.disabledText} /></main>
+      : !session.enabled ? <main className="admin-centered"><AdminMessage title={t.disabled} text={t.disabledText} /></main>
       : !session.authenticated ? <main className="admin-centered"><form className="admin-login" onSubmit={login}><img src="/koma-icon-64.png" alt="" /><span>{t.console}</span><h1>{t.loginTitle}</h1><p>{t.loginText}</p><label><strong>{t.password}</strong><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" autoFocus required /></label><button className="primary-button" type="submit" disabled={busy}>{busy ? t.signingIn : t.signIn}</button>{error && <p className="admin-error" role="alert">{error}</p>}</form></main>
       : <main className="admin-main">
         <section className="admin-heading"><div><span>{t.console}</span><h1>{t.title}</h1><p>{t.subtitle}</p></div><div className="admin-source"><i className={settings?.source === "admin" ? "online" : ""} /><span>{settings?.source === "admin" ? t.sourceAdmin : t.sourceEnvironment}<small>{settings?.updatedAt ? formatDate(settings.updatedAt, language) : "—"}</small></span></div></section>
@@ -363,7 +364,7 @@ function ProviderEditor({ stage, title, value, options, t, onChange, onSelect }:
   return <fieldset className="provider-card"><legend><span>{stage.toUpperCase()}</span><strong>{title}</strong></legend><div className={`key-state ${value.keyConfigured || mock ? "configured" : ""}`}><i />{mock ? "Demo" : value.keyConfigured ? `${t.configured} ${value.keyHint || ""}` : t.missing}</div><label><span>{t.provider}</span><select value={value.provider} onChange={(event) => onSelect(event.target.value)}>{options.map((provider) => <option value={provider} key={provider}>{provider}</option>)}</select></label>{mock ? <p className="provider-mock-note">{t.mockHint}</p> : <><label><span>{t.model}</span><input value={value.model} onChange={(event) => onChange({ model: event.target.value })} required /></label><label><span>{t.baseUrl}</span><input type="url" value={value.baseUrl} onChange={(event) => onChange({ baseUrl: event.target.value })} required /></label><label><span>{t.apiKey}</span><input type="password" value={value.apiKey} onChange={(event) => onChange({ apiKey: event.target.value })} placeholder={value.keyConfigured ? t.keyKeep : t.keyNew} autoComplete="new-password" /></label></>}</fieldset>;
 }
 
-function AdminMessage({ title, text }: { icon: string; title: string; text: string }) {
+function AdminMessage({ title, text }: { title: string; text: string }) {
   return <div className="admin-message"><div className="admin-message-icon">×</div><h1>{title}</h1><p>{text}</p><a className="primary-button" href="/">Koma</a></div>;
 }
 
@@ -404,8 +405,13 @@ function messageOf(value: unknown): string {
 }
 
 function formatDate(timestamp: number, language: Language): string {
-  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
+  return dateFormatters[language].format(new Date(timestamp));
 }
+
+const dateFormatters: Record<Language, Intl.DateTimeFormat> = {
+  en: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+  zh: new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+};
 
 function formatDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000));

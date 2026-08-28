@@ -3,7 +3,9 @@
 .env
 node_modules
 dist
+dist-server
 coverage
 work
+data
 *.log
 .DS_Store

@@ -3,6 +3,13 @@ name: Deploy Koma
 on:
   workflow_dispatch:
 
+env:
+  NODE_VERSION: 22.23.2
+
+concurrency:
+  group: deploy-koma-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -14,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 22.13.1
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Resolve deployment settings
@@ -30,21 +37,18 @@ jobs:
       - name: Check
         run: npm run check
 
-      - name: Check deployment secrets
-        id: deploy-secrets
+      - name: Validate deployment secrets
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
         run: |
-          if [ -n "$SERVER_HOST" ] && [ -n "$SERVER_PASSWORD" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "SERVER_HOST or SERVER_PASSWORD is not configured; skipping remote deployment."
+          if [ -z "$SERVER_HOST" ] || [ -z "$SERVER_USER" ] || [ -z "$SERVER_PASSWORD" ]; then
+            echo "::error::SERVER_HOST, SERVER_USER, and SERVER_PASSWORD must all be configured."
+            exit 1
           fi
 
       - name: Deploy files to server
-        if: steps.deploy-secrets.outputs.ready == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -55,7 +59,6 @@ jobs:
           strip_components: 0
 
       - name: Restart Koma with pm2
-        if: steps.deploy-secrets.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.0.3
         env:
           APP_PORT: "3010"
@@ -97,10 +100,10 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           timeout: 30m
-          envs: APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY,ADMIN_PASSWORD,KOMA_CONFIG_SECRET,DB_DRIVER,DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,DB_SSL,DB_AUTO_CREATE,STORAGE_DRIVER,LOCAL_STORAGE_PATH,OSS_REGION,OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET,OSS_UPLOAD_PREFIX,OSS_PUBLIC_BASE_URL
+          envs: NODE_VERSION,APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY,ADMIN_PASSWORD,KOMA_CONFIG_SECRET,DB_DRIVER,DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,DB_SSL,DB_AUTO_CREATE,STORAGE_DRIVER,LOCAL_STORAGE_PATH,OSS_REGION,OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET,OSS_UPLOAD_PREFIX,OSS_PUBLIC_BASE_URL
           script: |
             set -e
-            runtime_version="22.13.1"
+            runtime_version="$NODE_VERSION"
             runtime_root="$HOME/koma-runtime/node-v$runtime_version"
             node_bin="$runtime_root/bin/node"
             if [ ! -x "$node_bin" ]; then

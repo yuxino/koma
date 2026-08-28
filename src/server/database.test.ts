@@ -57,10 +57,15 @@ describe("database adapter", () => {
       createdAt: 1000, updatedAt: 1500, completedAt: 1500, storagePrefix: "koma/jobs/job-1",
       inputObjectKey: "koma/jobs/job-1/video/source.mp4", inputMimeType: "video/mp4", mediaAvailable: true, error: null
     });
+    const parseSpy = vi.spyOn(JSON, "parse");
     const history = await database.listJobHistory();
+    const ownedHistory = await database.listOwnedJobHistory(ownerId);
+    const parseCallCount = parseSpy.mock.calls.length;
+    parseSpy.mockRestore();
+    expect(parseCallCount).toBe(0);
     expect(history[0]).toMatchObject({ id: "job-1", status: "done", percent: 100, mediaAvailable: true, asrProvider: "groq" });
     expect(JSON.stringify(history)).not.toContain("encrypted-payload");
-    expect(await database.listOwnedJobHistory(ownerId)).toMatchObject([{ id: "job-1", status: "done" }]);
+    expect(ownedHistory).toMatchObject([{ id: "job-1", status: "done" }]);
     expect(await database.listOwnedJobHistory("b".repeat(64))).toEqual([]);
 
     const replay = await database.readJobRecord("job-1");

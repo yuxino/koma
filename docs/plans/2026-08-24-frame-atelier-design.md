@@ -109,8 +109,8 @@ Logo 以小尺寸为起点，而不是先画大插图再缩小。
 | 文件 | 目标规格 | 用途 |
 | --- | --- | --- |
 | `public/koma-icon-64.png` | 64×64 RGBA | favicon、导航与 32–42px 小尺寸标识 |
-| `public/koma-icon.png` | 256×256 RGBA | 应用图标和帮助 |
-| `public/koma-readme-icon.png` | 512×512 RGBA | README 和文档展示 |
+| `docs/images/koma-icon.png` | 256×256 RGBA | 应用图标和帮助 |
+| `docs/images/koma-readme-icon.png` | 512×512 RGBA | README 和文档展示 |
 | `public/koma-mascot.png` | 至少 1024px、RGBA | 首页完整 2～2.5 头身 Q 版角色 |
 
 四个文件必须来自同一黑发双丸子头角色主设，不得混用旧角色或不同画风。`koma-icon-64.png` 使用独立头部构图，再针对小尺寸导出，不能直接把全身大图机械缩放。

@@ -7,7 +7,7 @@ import ffmpegStatic from "ffmpeg-static";
 import { config } from "./config.js";
 
 const require = createRequire(import.meta.url);
-const ffprobeStatic = require("ffprobe-static") as { path: string };
+const ffprobeStatic = require("@ffprobe-installer/ffprobe") as { path: string };
 
 const ffmpegBin: string = process.env.FFMPEG_PATH || (ffmpegStatic as unknown as string) || "ffmpeg";
 const ffprobeBin: string = process.env.FFPROBE_PATH || ((ffprobeStatic as { path?: string } | null)?.path) || "ffprobe";
@@ -166,8 +166,10 @@ async function extractSceneFrames(inputPath: string, outputDir: string, options:
       filename,
       atMs: Math.max(0, Math.round((times[index] ?? 0) * 1000))
     }));
-  } catch {
+  } catch (error) {
     // 场景检测失败（如阈值过高没抽到帧）时返回空，由均匀补足接管
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (options.signal?.aborted) throw new DOMException("分析已取消。", "AbortError");
     return [];
   }
 }
@@ -241,6 +243,7 @@ export function createAudioSegmentMetadata(names: string[], durationMs: number, 
 }
 
 export function runCommand(command: string, args: string[], signal?: AbortSignal): Promise<{ stdout: string; stderr: string }> {
+  if (signal?.aborted) return Promise.reject(new DOMException("分析已取消。", "AbortError"));
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";

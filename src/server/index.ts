@@ -35,7 +35,7 @@ await markInterruptedJobs();
 await initializeStorage();
 await initializeProviderSettings();
 
-const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024, trustProxy: config.trustProxy });
+const app = Fastify({ logger: true, bodyLimit: 64 * 1024, trustProxy: config.trustProxy });
 const demoLimiter = createDailyLimiter(config.demoRequestsPerIpPerDay);
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
 

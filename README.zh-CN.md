@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/koma-readme-icon.png" width="112" alt="Koma 图标">
+  <img src="docs/images/koma-readme-icon.png" width="112" alt="Koma 图标">
   <h1>Koma</h1>
   <p>把视频变成可以使用的数据。</p>
   <p><a href="README.md">English</a></p>

@@ -39,9 +39,11 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `OSS_UPLOAD_PREFIX` | `koma` keeps this project in its own folder |
 | `OSS_PUBLIC_BASE_URL` | Optional public/CDN base URL; omit for private signed URLs |
 
+`SERVER_HOST`, `SERVER_USER`, and `SERVER_PASSWORD` are all required. The manual workflow fails before copying files when any of them is missing.
+
 ## Server Setup
 
-Install Node.js 22.13+, PM2, and nginx.
+Install Node.js 22.23.2+, PM2, and nginx. The deployment workflow uses the same Node.js patch version for its checks and managed runtime.
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -52,6 +54,8 @@ npm i -g pm2
 Example nginx configuration:
 
 This is only the upstream HTTP portion. Before exposing Koma publicly, terminate TLS in front of nginx or add a certificate-backed `listen 443 ssl` server and redirect port 80 to HTTPS. Never send `/admin` credentials or session cookies over public plain HTTP.
+
+Koma's URL importer is not yet a complete SSRF boundary: redirects and resolved addresses are not comprehensively blocked from private or link-local networks. Do not expose URL submission to untrusted users without an outbound network policy or a trusted URL allowlist. Rate limits reduce abuse volume but do not close this network-access risk.
 
 ```nginx
 server {
@@ -82,14 +86,29 @@ nginx -t && systemctl reload nginx
 
 ## Deployment
 
-Run the **Deploy Koma** workflow manually from the repository's Actions page. It checks and builds the application, copies the required files to `~/koma`, installs production dependencies, writes `.env`, and reloads the PM2 process. A normal push to `main` runs CI only and never deploys production. Secrets are read when the workflow runs, so redeploy after adding or changing any runtime Secret.
+Run the **Deploy Koma** workflow manually from the repository's Actions page. It checks and builds the application, copies the required files to `~/koma`, installs production dependencies, writes `.env`, stops the existing PM2 process, and starts the new build. This causes a brief interruption; the current workflow is not a zero-downtime deployment. A normal push to `main` runs CI only and never deploys production. Secrets are read when the workflow runs, so redeploy after adding or changing any runtime Secret. Concurrent manual runs are serialized so they cannot copy and restart Koma at the same time.
 
 Equivalent PM2 command:
 
 ```bash
-pm2 reload koma || pm2 start dist-server/index.js --name koma
+pm2 delete koma 2>/dev/null || true
+pm2 start dist-server/index.js --name koma
 pm2 save
 ```
+
+## Docker
+
+The Dockerfile is an alternative packaging path; the current production workflow above does not use it. With the default SQLite database and local object storage, mount `/app/data` from a persistent volume so recreating the container does not delete replay records or media:
+
+```bash
+docker build -t koma:local .
+docker volume create koma-data
+docker run --rm -p 3000:3000 --env-file .env \
+  --mount type=volume,source=koma-data,target=/app/data \
+  koma:local
+```
+
+Keep production credentials in an external environment file or secret manager; do not copy them into the image.
 
 ## Verify
 
