@@ -58,20 +58,31 @@ export async function generateAnalysisSpec(
   const language = validateAnalysisSpecGenerationLanguage(rawLanguage) || "zh";
   assertConfiguredProvider(provider);
   const complete = dependencies.requestChatCompletion || requestChatCompletion;
-  let content: ChatCompletionContent;
+  const prompt = buildAnalysisSpecPrompt(instruction, additions, language);
+  const requestModel = async (userContent: string): Promise<ChatCompletionContent> => {
+    try {
+      return await complete({
+        provider,
+        userContent,
+        temperature: 0.1,
+        maxTokens: config.visionMaxTokens,
+        signal
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw new AnalysisSpecAiError("生成 JSON 配置时模型请求失败，请稍后重试。", 502, "upstream");
+    }
+  };
+
+  const content = await requestModel(prompt);
   try {
-    content = await complete({
-      provider,
-      userContent: buildAnalysisSpecPrompt(instruction, additions, language),
-      temperature: 0.1,
-      maxTokens: config.visionMaxTokens,
-      signal
-    });
+    return parseGeneratedAnalysisSpec(content);
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    throw new AnalysisSpecAiError("生成 JSON 配置时模型请求失败，请稍后重试。", 502, "upstream");
+    if (!(error instanceof AnalysisSpecAiError) || error.kind !== "invalid-output") throw error;
   }
-  return parseGeneratedAnalysisSpec(content);
+
+  const repairedContent = await requestModel(buildAnalysisSpecRepairPrompt(prompt));
+  return parseGeneratedAnalysisSpec(repairedContent);
 }
 
 /** Validate without rewriting so the user's request reaches the model unchanged. */
@@ -179,6 +190,16 @@ ${instruction}
 <untrusted_quick_additions>
 ${additionsBlock}
 </untrusted_quick_additions>`;
+}
+
+function buildAnalysisSpecRepairPrompt(prompt: string): string {
+  return `${prompt}
+
+上一次返回的内容未通过 JSON 配置校验。请重新生成完整结果，并严格执行以下修复要求：
+1. 只返回一个可直接解析的 JSON 对象，不要 Markdown、代码围栏或解释。
+2. 根对象只能包含 outputSchema 和 fieldDescriptions。
+3. 所有字段名必须是英文 lowerCamelCase。
+4. fieldDescriptions 必须与 outputSchema 的每个叶子路径一一对应，不得缺少、重复或增加路径。`;
 }
 
 function collectExampleLeafPaths(value: unknown, path = ""): string[] {

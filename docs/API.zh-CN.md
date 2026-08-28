@@ -2,6 +2,24 @@
 
 Koma 的分析任务是异步的。提交视频后轮询任务，完成后既可以读取完整视频理解结果，也可以只取自定义提取出的 JSON。
 
+## 分析权限
+
+配置 `ADMIN_PASSWORD` 后，`POST /api/analysis-spec/generate`、`POST /api/analyze/url` 和 `POST /api/analyze/upload` 都要求同时携带由 `POST /api/admin/login` 建立的 `koma_admin` 管理员会话，以及同源请求头 `x-koma-admin: 1`。请求头正确但未登录时返回 `401`；请求头缺失或错误时返回 `403`。管理员登录后，Koma 浏览器界面会自动发送 HttpOnly Cookie 和该请求头；API 客户端需要自行保存 Cookie 并补上请求头。
+
+`ADMIN_PASSWORD` 为空时，这三个接口保持免账号公开使用。只读任务和回看接口在两种模式下都不变。
+
+下方提交示例默认使用公开模式。受保护模式应先登录一次并保存 Cookie：
+
+```bash
+curl -X POST http://localhost:3000/api/admin/login \
+  -H 'content-type: application/json' \
+  -H 'x-koma-admin: 1' \
+  -c cookies.txt \
+  -d '{"password":"YOUR_ADMIN_PASSWORD"}'
+```
+
+随后给三个受保护请求都加上 `-b cookies.txt -H 'x-koma-admin: 1'`。
+
 ## 用 AI 整理 JSON 结构
 
 提交视频前，可以让已配置的视觉 Provider 把自然语言要求整理成可编辑的 JSON 示例：
@@ -37,7 +55,9 @@ curl -X POST http://localhost:3000/api/analysis-spec/generate \
 
 `instruction` 或 `additions` 至少要有一项非空内容，合计最长 4000 字符；`additions` 最多接受 8 个字符串。每个 JSON 叶子字段必须有且仅有一条同路径说明，不接受缺失、重复或多余路径。`lang` 可省略，仅支持 `en` 或 `zh`。请求体上限为 16 KiB，成功响应包含 `cache-control: no-store`。
 
-只有配置了真实视觉 Provider 及其凭据时，这个接口才可用。它与视频分析共用演示额度，无效请求会在消耗额度前被拒绝。无效输入返回 `400`，请求体过大返回 `413`，演示额度耗尽返回 `429`，Provider 调用失败或返回无效 JSON 结构返回 `502`，视觉 Provider 不可用或未配置返回 `503`。
+只有配置了真实视觉 Provider 及其凭据时，这个接口才可用。它与视频分析共用演示额度，无效请求会在消耗额度前被拒绝。模型第一次返回的内容若无法解析，或未通过 JSON 结构/路径校验，Koma 会用更严格的要求自动请求一次完整修复结果；修复后仍无效才返回 `502`，Provider 请求失败则不重试。
+
+无效输入返回 `400`，受保护模式下缺少管理员会话返回 `401`、缺少请求头返回 `403`，请求体过大返回 `413`，演示额度耗尽返回 `429`，Provider 请求失败或修复结果仍无效返回 `502`，视觉 Provider 不可用或未配置返回 `503`。
 
 ## 视频地址
 
@@ -62,6 +82,8 @@ curl -X POST http://localhost:3000/api/analyze/url \
 ```json
 { "jobId": "..." }
 ```
+
+`ADMIN_PASSWORD` 为空时，视频地址提交接口对外公开。Koma 尚未完整阻止重定向或解析到私有、链路本地地址的域名。管理员登录只能限制调用者，不能充当出站网络隔离；公开部署仍应配置出站策略或可信 URL 白名单。
 
 ## 本地上传
 

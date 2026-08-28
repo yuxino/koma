@@ -60,7 +60,7 @@ app.get("/api/health", async () => {
   };
 });
 
-app.post("/api/analysis-spec/generate", { bodyLimit: 16 * 1024 }, async (request, reply) => {
+app.post("/api/analysis-spec/generate", { bodyLimit: 16 * 1024, onRequest: requireAnalysisAccess }, async (request, reply) => {
   reply.header("cache-control", "no-store");
   let instruction: string;
   let additions: string[];
@@ -171,7 +171,7 @@ app.delete("/api/my/jobs/:id", async (request: FastifyRequest<{ Params: { id: st
   return reply.code(204).send();
 });
 
-app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyReply) => {
+app.post("/api/analyze/upload", { onRequest: requireAnalysisAccess }, async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
   try {
     const part = await request.file();
@@ -199,7 +199,7 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
   }
 });
 
-app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply) => {
+app.post("/api/analyze/url", { onRequest: requireAnalysisAccess }, async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
   try {
     const body = request.body as { url?: unknown; lang?: unknown; instruction?: unknown; outputSchema?: unknown; artifactFormats?: unknown } | undefined;
@@ -327,6 +327,19 @@ function requireAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
     return false;
   }
   return true;
+}
+
+async function requireAnalysisAccess(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!adminAuthEnabled()) return;
+  if (!adminMutationHeader(request)) {
+    reply.code(403).send({ error: "管理请求校验失败。" });
+    return;
+  }
+  if (isAdminSession(request.headers.cookie)) return;
+  reply
+    .header("cache-control", "no-store")
+    .code(401)
+    .send({ error: "请先登录管理后台，再开始生成或分析。" });
 }
 
 function requireAdminMutation(request: FastifyRequest, reply: FastifyReply): boolean {

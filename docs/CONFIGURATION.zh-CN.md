@@ -12,6 +12,8 @@ Koma 把 AI 分成两个独立阶段：
 
 默认 mock 模式可以演示总结、章节和时间线，但不会伪造结构化业务数据；按要求提取必须配置真实视觉模型。
 
+AI 整理 JSON 结构通常只调用一次视觉 Provider。若结果无法解析，或未通过结构/路径校验，Koma 会再发起一次要求更严格的修复请求，然后才返回无效输出错误。
+
 ## Provider 预设
 
 | 阶段 | Provider | 默认模型 | Key |
@@ -56,6 +58,8 @@ OPENROUTER_API_KEY=...
 - 同时只分析 1 个任务。
 
 结果会永久保留。提交者可以从“我的任务”删除当前浏览器创建的任务，管理员也应定期在 `/admin` 查看存储占用并清理不需要的演示任务。
+
+私人单用户部署应配置 `ADMIN_PASSWORD`。留空会让 AI JSON 生成和两个分析提交接口继续公开；每日限流只能减少请求量，不能替代身份验证或形成 SSRF 边界。
 
 内置限流适合单机演示，多实例部署应在网关或共享存储中统一限流。nginx 后设置 `TRUST_PROXY=true` 前，必须确认代理会覆盖客户端伪造的 `X-Forwarded-For`。
 
@@ -136,13 +140,13 @@ VISION_MODEL=vision-model
 
 ## 管理平台与数据库
 
-配置 `ADMIN_PASSWORD` 后可访问 `/admin`，在页面中修改 Provider、模型、Base URL 和 API Key。API Key 会先用 AES-256-GCM 加密再写入数据库，浏览器只会收到末四位掩码。建议额外配置稳定、随机的 `KOMA_CONFIG_SECRET`；如果省略则回退使用 `ADMIN_PASSWORD` 作为加密密钥。
+配置 `ADMIN_PASSWORD` 后可访问 `/admin`，在页面中修改 Provider、模型、Base URL 和 API Key。同一个管理员会话也会保护 AI JSON 生成、视频地址分析和文件上传分析；只有希望这些提交接口保持公开时才留空。API Key 会先用 AES-256-GCM 加密再写入数据库，浏览器只会收到末四位掩码。建议额外配置稳定、随机的 `KOMA_CONFIG_SECRET`；如果省略则回退使用 `ADMIN_PASSWORD` 作为加密密钥。
 
 本地默认使用 `DB_DRIVER=sqlite` 和 `./data/koma.sqlite`。线上可使用独立 MySQL 数据库：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ADMIN_PASSWORD` | 空 | 为空时完全禁用管理后台 |
+| `ADMIN_PASSWORD` | 空 | 启用 `/admin`，并保护 AI JSON 生成及地址/上传提交；为空时后台禁用、提交接口公开 |
 | `KOMA_CONFIG_SECRET` | `ADMIN_PASSWORD` | Provider 配置加密密钥，推荐单独设置 |
 | `DB_DRIVER` | `sqlite` | `sqlite` 或 `mysql` |
 | `KOMA_DATABASE_PATH` | `./data/koma.sqlite` | SQLite 文件路径 |

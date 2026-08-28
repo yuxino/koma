@@ -12,6 +12,8 @@ The two providers can be mixed; Koma is not tied to Qwen.
 
 Mock mode demonstrates summaries, chapters, and the timeline without inventing business data. Custom extraction therefore requires a real vision provider.
 
+AI JSON-shape generation normally uses one vision-provider request. If that response is malformed or fails shape/path validation, Koma makes one stricter repair request before returning an invalid-output error.
+
 ## Provider presets
 
 | Stage | Provider | Default model | Key |
@@ -50,6 +52,8 @@ This combination uses:
 - [OpenRouter Free Models Router](https://openrouter.ai/openrouter/free), which selects a currently available free model capable of image input.
 
 Free services still require account keys; there is no dependable anonymous, unlimited AI endpoint. Keys stay on the Koma server and never reach the browser. Because account-level quotas are limited, the demo template defaults to three-minute videos, three submissions per IP per UTC day, and one concurrent job. Results are persistent, so administrators should review storage usage and delete unwanted demos from `/admin`.
+
+Set `ADMIN_PASSWORD` for a private single-user deployment. Leaving it empty keeps AI JSON generation and both analysis submission endpoints public; the daily limiter reduces request volume but is not authentication or an SSRF boundary.
 
 The built-in rate limiter is intended for a single-node demo. Multi-instance deployments should rate-limit at the gateway or in shared storage. Before setting `TRUST_PROXY=true` behind nginx, make sure the proxy overwrites client-supplied `X-Forwarded-For`.
 
@@ -130,13 +134,13 @@ Legacy `ANALYSIS_PROVIDER=openai-compatible` remains accepted, but new deploymen
 
 ## Administration and database
 
-Set `ADMIN_PASSWORD` to enable `/admin`, where an administrator can change providers, models, base URLs, and API keys. Keys are encrypted with AES-256-GCM before being written to the database; the browser only receives a last-four-character hint. Set a separate stable random `KOMA_CONFIG_SECRET`; when omitted, Koma falls back to `ADMIN_PASSWORD` as the encryption key.
+Set `ADMIN_PASSWORD` to enable `/admin`, where an administrator can change providers, models, base URLs, and API keys. The same administrator session is then required by AI JSON generation, URL analysis, and upload analysis. Leave it empty only when those submission endpoints should remain public. Keys are encrypted with AES-256-GCM before being written to the database; the browser only receives a last-four-character hint. Set a separate stable random `KOMA_CONFIG_SECRET`; when omitted, Koma falls back to `ADMIN_PASSWORD` as the encryption key.
 
 Local development uses `DB_DRIVER=sqlite` and `./data/koma.sqlite` by default. Production can use a dedicated MySQL database:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ADMIN_PASSWORD` | empty | The admin console is disabled when empty |
+| `ADMIN_PASSWORD` | empty | Enables `/admin` and protects AI JSON generation plus URL/upload submission; when empty, `/admin` is disabled and the submission endpoints are public |
 | `KOMA_CONFIG_SECRET` | `ADMIN_PASSWORD` | Provider-settings encryption secret; set it separately in production |
 | `DB_DRIVER` | `sqlite` | `sqlite` or `mysql` |
 | `KOMA_DATABASE_PATH` | `./data/koma.sqlite` | SQLite file path |

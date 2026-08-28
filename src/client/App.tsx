@@ -20,6 +20,7 @@ import { progressStepStates } from "./progress.js";
 import "./atelier-public.css";
 
 type Language = "en" | "zh";
+const analysisAccessHeaders = { "x-koma-admin": "1" };
 
 type Stage = "queued" | "resolving" | "downloading" | "inspecting" | "extracting_frames" | "extracting_audio" | "transcribing" | "interpreting" | "done" | "failed" | string;
 
@@ -740,7 +741,7 @@ function App() {
         window.history.replaceState({}, "", `/jobs/${jobId}`);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
-        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: composedInstruction || undefined, outputSchema: parsedOutputSchema }) });
+        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json", ...analysisAccessHeaders }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: composedInstruction || undefined, outputSchema: parsedOutputSchema }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
         if (!response.ok) throw new Error(body.error || t.startFailed);
         if (!body.jobId) throw new Error(t.startFailed);
@@ -772,6 +773,7 @@ function App() {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `/api/analyze/upload?lang=${language}`);
+      xhr.setRequestHeader("x-koma-admin", "1");
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && jobNavigationRevisionRef.current === navigationRevision) {
           setUploadPercent(Math.round((event.loaded / event.total) * 100));
@@ -878,7 +880,7 @@ function App() {
         .map((item) => item.instruction);
       const response = await fetch("/api/analysis-spec/generate", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...analysisAccessHeaders },
         cache: "no-store",
         body: JSON.stringify({ instruction: instruction.trim(), additions, lang: language }),
         signal: controller.signal
@@ -886,7 +888,7 @@ function App() {
       const body = await response.json().catch(() => ({})) as { outputSchema?: unknown; fieldDescriptions?: unknown; error?: string };
       if (!response.ok) {
         if (response.status === 503) throw new Error(t.schemaUnavailable);
-        if (response.status === 400 || response.status === 429) throw new Error(body.error || t.schemaGenerateFailed);
+        if ([400, 401, 403, 429].includes(response.status)) throw new Error(body.error || t.schemaGenerateFailed);
         throw new Error(t.schemaGenerateFailed);
       }
       const serialized = JSON.stringify(body.outputSchema, null, 2);

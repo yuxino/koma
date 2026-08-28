@@ -2,6 +2,24 @@
 
 Koma analysis jobs are asynchronous. Submit a video, poll the job, then retrieve either the complete video-understanding result or only the requested JSON.
 
+## Analysis access
+
+When `ADMIN_PASSWORD` is configured, `POST /api/analysis-spec/generate`, `POST /api/analyze/url`, and `POST /api/analyze/upload` require both the existing `koma_admin` session created by `POST /api/admin/login` and the same-origin request header `x-koma-admin: 1`. With that header present, an unauthenticated request returns `401`; a missing or incorrect header returns `403`. After administrator sign-in, the Koma browser UI sends the HttpOnly cookie and request header automatically. API clients must preserve the cookie and add the header themselves.
+
+When `ADMIN_PASSWORD` is empty, these three endpoints keep their account-free public behavior. Read-only job and replay endpoints are unchanged in either mode.
+
+The submission examples below assume that public mode. In protected mode, sign in once and save the cookie:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/login \
+  -H 'content-type: application/json' \
+  -H 'x-koma-admin: 1' \
+  -c cookies.txt \
+  -d '{"password":"YOUR_ADMIN_PASSWORD"}'
+```
+
+Then add `-b cookies.txt -H 'x-koma-admin: 1'` to each of the three protected requests.
+
 ## Build a JSON shape with AI
 
 Use the configured vision provider to turn a natural-language request into an editable JSON example before submitting a video:
@@ -37,7 +55,9 @@ The response is not a job and contains no video analysis. `outputSchema` is alwa
 
 At least one non-empty `instruction` or `additions` item is required; their combined content is limited to 4,000 characters. `additions` accepts up to eight strings. Every schema leaf has exactly one matching description path, with no extra or duplicate paths. `lang` is optional and accepts `en` or `zh`. The request body is limited to 16 KiB, and successful responses include `cache-control: no-store`.
 
-The endpoint is available only when a real vision provider and its credentials are configured. It uses the same demo allowance as video analysis: invalid input is rejected before allowance is consumed. Errors are `400` for invalid input, `413` for an oversized body, `429` when the demo allowance is exhausted, `502` when the provider fails or returns an invalid JSON shape, and `503` when the vision provider is unavailable or not configured.
+The endpoint is available only when a real vision provider and its credentials are configured. It uses the same demo allowance as video analysis: invalid input is rejected before allowance is consumed. If the first model response is malformed or fails the JSON shape/path checks, Koma requests one complete repair response with stricter instructions. It returns `502` if that repair is still invalid; provider request failures are not retried.
+
+Errors are `400` for invalid input, `401` when protected analysis access lacks an administrator session, `403` when its request header is missing, `413` for an oversized body, `429` when the demo allowance is exhausted, `502` when the provider request fails or the repaired response is invalid, and `503` when the vision provider is unavailable or not configured.
 
 ## Video URL
 
@@ -62,6 +82,8 @@ The endpoint responds with `202`. The ID also forms the permanent, unguessable r
 ```json
 { "jobId": "..." }
 ```
+
+With `ADMIN_PASSWORD` empty, URL submission is public. Koma does not yet comprehensively block redirects or hostnames that resolve to private or link-local addresses. Administrator authentication limits who can call this endpoint, but it is not an outbound network boundary; public deployments still need an egress policy or a trusted URL allowlist.
 
 ## Local upload
 

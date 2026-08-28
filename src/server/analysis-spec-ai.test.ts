@@ -76,6 +76,50 @@ describe("parseGeneratedAnalysisSpec", () => {
 });
 
 describe("generateAnalysisSpec", () => {
+  it("uses one model request when the first response is valid", async () => {
+    let calls = 0;
+    await expect(generateAnalysisSpec({ instruction: "提取人物姓名", provider }, {
+      requestChatCompletion: async () => {
+        calls += 1;
+        return '{"outputSchema":{"people":[{"name":"string"}]},"fieldDescriptions":[{"path":"people[].name","label":"人物姓名","description":"视频中出现人物的姓名或称呼","source":"request"}]}';
+      }
+    })).resolves.toMatchObject({ outputSchema: { people: [{ name: "string" }] } });
+
+    expect(calls).toBe(1);
+  });
+
+  it("retries once with stricter JSON instructions when the first response is invalid", async () => {
+    const requests: ChatCompletionRequest[] = [];
+    const result = await generateAnalysisSpec({ instruction: "提取人物姓名", provider }, {
+      requestChatCompletion: async (request) => {
+        requests.push(request);
+        return requests.length === 1
+          ? '{"outputSchema":{"people":[{"display_name":"string"}]},"fieldDescriptions":[]}'
+          : '{"outputSchema":{"people":[{"displayName":"string"}]},"fieldDescriptions":[{"path":"people[].displayName","label":"人物姓名","description":"视频中出现人物的姓名或称呼","source":"request"}]}';
+      }
+    });
+
+    expect(result.outputSchema).toEqual({ people: [{ displayName: "string" }] });
+    expect(requests).toHaveLength(2);
+    expect(requests[1].userContent).toContain("上一次返回的内容未通过 JSON 配置校验");
+    expect(requests[1].userContent).toContain("提取人物姓名");
+  });
+
+  it("stops after one repair attempt and keeps the invalid-output error", async () => {
+    let calls = 0;
+    const error = await generateAnalysisSpec({ instruction: "提取人物姓名", provider }, {
+      requestChatCompletion: async () => {
+        calls += 1;
+        return "not json";
+      }
+    }).catch((caught: unknown) => caught);
+
+    expect(calls).toBe(2);
+    expect(error).toBeInstanceOf(AnalysisSpecAiError);
+    expect(error).toMatchObject({ statusCode: 502, kind: "invalid-output" });
+    expect((error as Error).message).toBe("模型没有返回可用的 JSON 配置，请调整描述后重试。");
+  });
+
   it("preserves the untrusted request and asks for placeholders, not invented values", async () => {
     const instruction = "  识别车牌号、省份和城市，不要改写我的要求。\n";
     let captured: ChatCompletionRequest | undefined;
@@ -111,10 +155,15 @@ describe("generateAnalysisSpec", () => {
   });
 
   it("maps provider failures to a sanitized 502 error", async () => {
+    let calls = 0;
     const error = await generateAnalysisSpec({ instruction: "提取人物", provider }, {
-      requestChatCompletion: async () => { throw new Error("network internals and secret"); }
+      requestChatCompletion: async () => {
+        calls += 1;
+        throw new Error("network internals and secret");
+      }
     }).catch((caught: unknown) => caught);
 
+    expect(calls).toBe(1);
     expect(error).toBeInstanceOf(AnalysisSpecAiError);
     expect(error).toMatchObject({ statusCode: 502, kind: "upstream" });
     expect((error as Error).message).not.toContain("network internals");
@@ -125,6 +174,19 @@ describe("generateAnalysisSpec", () => {
     await expect(generateAnalysisSpec({ instruction: "提取人物", provider }, {
       requestChatCompletion: async () => { throw aborted; }
     })).rejects.toBe(aborted);
+  });
+
+  it("preserves cancellation during the repair attempt", async () => {
+    const aborted = new DOMException("cancelled", "AbortError");
+    let calls = 0;
+    await expect(generateAnalysisSpec({ instruction: "提取人物", provider }, {
+      requestChatCompletion: async () => {
+        calls += 1;
+        if (calls === 1) return "not json";
+        throw aborted;
+      }
+    })).rejects.toBe(aborted);
+    expect(calls).toBe(2);
   });
 
   it("validates the user request with a 400 status before generation", () => {

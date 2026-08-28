@@ -24,7 +24,7 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `VISION_MODEL` | Optional provider-model override |
 | `PUBLIC_BASE_URL` | Optional public URL for speaker diarization |
 | `DEMO_REQUESTS_PER_IP_PER_DAY` | Optional public-demo daily allowance, such as `3` |
-| `ADMIN_PASSWORD` | Enables the protected `/admin` console; use a long random value |
+| `ADMIN_PASSWORD` | Enables `/admin` and requires its session for AI JSON generation and URL/upload submission; use a long random value |
 | `KOMA_CONFIG_SECRET` | Stable random secret used to encrypt provider keys |
 | `DB_DRIVER` | `mysql` in production, or leave empty for local SQLite |
 | `DB_HOST` / `DB_PORT` | MySQL endpoint and port; keep the real endpoint in Secrets |
@@ -55,7 +55,9 @@ Example nginx configuration:
 
 This is only the upstream HTTP portion. Before exposing Koma publicly, terminate TLS in front of nginx or add a certificate-backed `listen 443 ssl` server and redirect port 80 to HTTPS. Never send `/admin` credentials or session cookies over public plain HTTP.
 
-Koma's URL importer is not yet a complete SSRF boundary: redirects and resolved addresses are not comprehensively blocked from private or link-local networks. Do not expose URL submission to untrusted users without an outbound network policy or a trusted URL allowlist. Rate limits reduce abuse volume but do not close this network-access risk.
+Setting `ADMIN_PASSWORD` prevents unauthenticated callers from generating AI JSON or submitting URL/upload analysis, which is the recommended mode for a private deployment. Leaving it empty keeps those endpoints public.
+
+Authentication is not complete network isolation. Koma's URL importer does not yet comprehensively block redirects or hostnames that resolve to private or link-local addresses. Do not expose URL submission to untrusted users without an outbound network policy or a trusted URL allowlist. Rate limits reduce abuse volume but do not close this SSRF risk.
 
 ```nginx
 server {

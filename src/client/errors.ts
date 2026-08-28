@@ -5,6 +5,8 @@ type Language = "en" | "zh";
 
 const translations: Array<[RegExp, string]> = [
   [/公开演示次数已经用完/, "Today's public demo allowance has been used. Try again tomorrow or configure your own model keys locally."],
+  [/请先登录管理后台|管理员登录已失效/, "Sign in as the administrator before creating an AI JSON shape or starting an analysis."],
+  [/管理请求校验失败/, "Refresh Koma and try again. The administrator request check was missing."],
   [/没有找到视频文件/, "No video file was found."],
   [/请放入视频文件/, "Please choose a video file."],
   [/视频太大了/, "Video is too large. Reduce the file size or pick a shorter video."],
