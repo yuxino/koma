@@ -3,6 +3,7 @@ import {
   ANALYSIS_SUGGESTION_IDS,
   MAX_ANALYSIS_INSTRUCTION_CHARS,
   MAX_OUTPUT_SCHEMA_CHARS,
+  analysisRequestKey,
   loadAnalysisConfig,
   restoreAnalysisDefault,
   saveAnalysisDefault,
@@ -11,6 +12,7 @@ import {
   type AnalysisFieldDescription,
   type AnalysisSuggestionId
 } from "./analysis-config.js";
+import { parseAnalysisSpec } from "../server/analysis-spec.js";
 import { translateServerError } from "./errors.js";
 import { formatTime } from "./format.js";
 import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
@@ -56,12 +58,6 @@ const copy = {
     flowVideo: "VIDEO",
     flowSignals: "AUDIO + FRAMES",
     flowOutput: "STRUCTURED JSON",
-    homeUnderstand: "Understand",
-    homeUnderstandSub: "Summary, chapters, subtitles, and key moments",
-    homeExtract: "Extract",
-    homeExtractSub: "Structured JSON shaped to your exact request",
-    homeDeliver: "Reuse",
-    homeDeliverSub: "Keep a browser draft and a reusable default",
     newAnalysis: "NEW ANALYSIS",
     startOne: "Start an analysis",
     sourceLabel: "Video source",
@@ -74,7 +70,6 @@ const copy = {
     urlHint: "Supports Douyin share links, Bilibili, YouTube and other public video URLs.",
     temporary: "Saved for permanent replay",
     customExtract: "JSON editor",
-    customHint: "No fixed shape · AI decides from your request",
     advancedDescription: "Review or edit the JSON shape Koma will return. Leave it empty to let AI decide during analysis.",
     reviewFieldsTitle: "Review output fields",
     reviewFieldsDescription: "Check what every candidate field means. Nothing changes until you confirm this list.",
@@ -82,9 +77,8 @@ const copy = {
     editJsonStructure: "Edit JSON",
     previewFields: "Preview fields",
     confirmFields: "Use these fields",
+    useAutomaticFields: "Use automatic fields",
     fieldsNeedDefinition: "Add at least one valid field before previewing.",
-    advancedConfigured: "JSON shape ready",
-    advancedRequirement: "Request added",
     cancelSettings: "Cancel",
     presetsLabel: "What should this video become?",
     presetsHint: "Describe the result in plain language. Koma can turn it into editable JSON.",
@@ -94,12 +88,16 @@ const copy = {
     buildJson: "Generate field structure",
     updateJson: "Regenerate fields",
     buildingJson: "Generating fields…",
+    cancelBuildingJson: "Cancel generation",
     editJson: "View / edit JSON",
+    reviewJson: "Review fields",
     defineJson: "Define fields manually",
     jsonReady: "Output fields confirmed",
+    jsonNeedsReview: "Output fields need review",
     jsonAutomatic: "Output fields are not defined",
     jsonAutomaticHint: "Koma will choose them during analysis. Generate them first if you want to review the exact fields.",
     jsonReadyHint: "These are the fields Koma will return for this analysis.",
+    jsonNeedsReviewHint: "Your request changed. Review or regenerate these fields before analysis.",
     outputFields: "Fields this analysis will return",
     outputFieldsCount: "fields",
     outputFieldsMore: "more in the JSON editor",
@@ -118,6 +116,7 @@ const copy = {
     schemaNeedsRequest: "Describe what you want first, or choose a quick addition.",
     schemaUnavailable: "AI JSON creation needs a configured vision model. You can still edit JSON manually.",
     schemaGenerateFailed: "Koma could not create the JSON shape. Your current configuration is unchanged.",
+    schemaNeedsReview: "Review these fields again because the analysis request changed.",
     configAutosaved: "Draft saved in this browser",
     saveDefault: "Set as default",
     restoreDefault: "Restore default",
@@ -241,12 +240,6 @@ const copy = {
     flowVideo: "视频",
     flowSignals: "声音 + 画面",
     flowOutput: "结构化 JSON",
-    homeUnderstand: "理解内容",
-    homeUnderstandSub: "总结、章节、字幕与关键瞬间",
-    homeExtract: "提取数据",
-    homeExtractSub: "严格按要求返回结构化 JSON",
-    homeDeliver: "复用配置",
-    homeDeliverSub: "浏览器自动保存草稿，也可以设为默认",
     newAnalysis: "NEW ANALYSIS",
     startOne: "开始一次分析",
     sourceLabel: "视频来源",
@@ -259,7 +252,6 @@ const copy = {
     urlHint: "支持抖音分享链接、B站、YouTube 等公开链接与视频直链。",
     temporary: "保存为可永久回看的任务",
     customExtract: "JSON 编辑器",
-    customHint: "未固定结构 · 分析时由 AI 按要求整理",
     advancedDescription: "检查或修改 Koma 将返回的 JSON 结构。留空时，分析过程中由 AI 自行决定。",
     reviewFieldsTitle: "确认输出字段",
     reviewFieldsDescription: "先检查每个候选字段的含义；确认前不会替换当前设置。",
@@ -267,9 +259,8 @@ const copy = {
     editJsonStructure: "编辑 JSON",
     previewFields: "预览字段",
     confirmFields: "确认使用这些字段",
+    useAutomaticFields: "改为自动决定字段",
     fieldsNeedDefinition: "请先添加至少一个有效字段，再查看预览。",
-    advancedConfigured: "JSON 结构已就绪",
-    advancedRequirement: "已填写要求",
     cancelSettings: "取消",
     presetsLabel: "你想得到什么？",
     presetsHint: "直接说结果要包含什么，Koma 可以先帮你整理成可编辑的 JSON。",
@@ -279,12 +270,16 @@ const copy = {
     buildJson: "生成字段结构",
     updateJson: "重新生成字段",
     buildingJson: "正在生成字段…",
+    cancelBuildingJson: "取消生成",
     editJson: "查看 / 编辑 JSON",
+    reviewJson: "重新确认字段",
     defineJson: "手动定义字段",
     jsonReady: "输出字段已确认",
+    jsonNeedsReview: "输出字段需要重新确认",
     jsonAutomatic: "尚未定义输出字段",
     jsonAutomaticHint: "直接分析时将由 Koma 临时决定；如需确认具体字段，请先生成字段结构。",
     jsonReadyHint: "Koma 会按照下面这些字段返回本次分析结果。",
+    jsonNeedsReviewHint: "分析要求已经改变，请重新确认或生成字段后再开始分析。",
     outputFields: "本次将生成的字段",
     outputFieldsCount: "个字段",
     outputFieldsMore: "个字段可在 JSON 编辑器中查看",
@@ -303,6 +298,7 @@ const copy = {
     schemaNeedsRequest: "先说说你想要什么，或者选择一个快速补充。",
     schemaUnavailable: "AI 整理 JSON 需要先配置视觉模型；你仍然可以手动编辑 JSON。",
     schemaGenerateFailed: "这次没有整理出可用的 JSON，当前配置没有被覆盖。",
+    schemaNeedsReview: "分析要求已经改变，请重新确认这些字段。",
     configAutosaved: "草稿已自动保存在这个浏览器",
     saveDefault: "设为默认",
     restoreDefault: "恢复默认",
@@ -453,8 +449,9 @@ function parseOutputSchema(value: string, errorMessage: string): unknown {
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (parsed === null || typeof parsed !== "object") throw new Error(errorMessage);
-    return parsed;
+    const normalized = parseAnalysisSpec({ outputSchema: parsed }).outputSchema;
+    if (normalized === undefined) throw new Error(errorMessage);
+    return normalized;
   } catch {
     throw new Error(errorMessage);
   }
@@ -529,6 +526,7 @@ function App() {
   const [suggestionIds, setSuggestionIds] = useState<AnalysisSuggestionId[]>(() => initialAnalysisConfig.draft.suggestionIds.filter(isAnalysisSuggestionId));
   const [outputSchema, setOutputSchema] = useState(initialAnalysisConfig.draft.outputSchema);
   const [fieldDescriptions, setFieldDescriptions] = useState<AnalysisFieldDescription[]>(initialAnalysisConfig.draft.fieldDescriptions ?? []);
+  const [outputSchemaRequestKey, setOutputSchemaRequestKey] = useState(initialAnalysisConfig.draft.outputSchemaRequestKey ?? "");
   const [defaultConfig, setDefaultConfig] = useState<AnalysisDraft | undefined>(initialAnalysisConfig.defaultConfig);
   const [generatingSchema, setGeneratingSchema] = useState(false);
   const [schemaActionError, setSchemaActionError] = useState("");
@@ -542,7 +540,14 @@ function App() {
   const schemaDialogReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const schemaGenerationAbortRef = useRef<AbortController | null>(null);
   const schemaGenerationRequestRef = useRef(0);
+  const jobRouteAbortRef = useRef<AbortController | null>(null);
+  const jobPollAbortRef = useRef<AbortController | null>(null);
+  const jobNavigationRevisionRef = useRef(0);
+  const languageRef = useRef(language);
+  const routeErrorCopyRef = useRef({ jobMissing: t.jobMissing, startFailed: t.startFailed });
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  languageRef.current = language;
+  routeErrorCopyRef.current = { jobMissing: t.jobMissing, startFailed: t.startFailed };
   const hasResult = job?.status === "done" && job.result;
   const progress = job?.progress?.percent ?? 0;
   const maxMinutes = Math.max(1, Math.round((serviceInfo?.limits?.maxDurationSeconds || 15 * 60) / 60));
@@ -553,12 +558,15 @@ function App() {
   const suggestionInstructionLength = effectiveAnalysisInstruction("", suggestionIds, language).length;
   const instructionLimit = Math.max(0, MAX_ANALYSIS_INSTRUCTION_CHARS - suggestionInstructionLength - (suggestionInstructionLength ? 2 : 0));
   const hasOutputSchema = Boolean(outputSchema.trim());
+  const currentAnalysisRequestKey = analysisRequestKey(instruction, suggestionIds);
+  const outputSchemaNeedsReview = hasOutputSchema && outputSchemaRequestKey !== currentAnalysisRequestKey;
   const outputFieldSummary = summarizeOutputSchema(outputSchema, language);
   const currentAnalysisDraft: AnalysisDraft = {
     instruction,
     suggestionIds,
     outputSchema,
-    ...(fieldDescriptions.length ? { fieldDescriptions } : {})
+    ...(fieldDescriptions.length ? { fieldDescriptions } : {}),
+    ...(outputSchemaRequestKey ? { outputSchemaRequestKey } : {})
   };
 
   useEffect(() => {
@@ -569,7 +577,7 @@ function App() {
 
   useEffect(() => {
     updateAnalysisDraft(window.localStorage, currentAnalysisDraft);
-  }, [instruction, suggestionIds, outputSchema, fieldDescriptions]);
+  }, [instruction, suggestionIds, outputSchema, fieldDescriptions, outputSchemaRequestKey]);
 
   useEffect(() => () => {
     schemaGenerationRequestRef.current += 1;
@@ -603,75 +611,167 @@ function App() {
   }, [showMoreMenu]);
 
   useEffect(() => {
-    const match = window.location.pathname.match(/^\/jobs\/([a-f0-9-]{20,64})\/?$/i);
-    if (!match) return undefined;
-    const controller = new AbortController();
-    setBusy(true);
-    fetch(`/api/jobs/${match[1]}`, { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(response.status === 404 ? t.jobMissing : t.startFailed);
-        setJob(await response.json() as Job);
-      })
-      .catch((cause) => { if (!controller.signal.aborted) setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language)); })
-      .finally(() => { if (!controller.signal.aborted) setBusy(false); });
-    return () => controller.abort();
+    const syncJobRoute = async () => {
+      jobRouteAbortRef.current?.abort();
+      jobRouteAbortRef.current = null;
+      jobPollAbortRef.current?.abort();
+      schemaGenerationRequestRef.current += 1;
+      schemaGenerationAbortRef.current?.abort();
+      schemaGenerationAbortRef.current = null;
+      setGeneratingSchema(false);
+      setShowAdvancedSettings(false);
+      setShowSettings(false);
+      setShowHistory(false);
+      setShowMoreMenu(false);
+      setUploadPercent(null);
+
+      const revision = jobNavigationRevisionRef.current + 1;
+      jobNavigationRevisionRef.current = revision;
+      const match = window.location.pathname.match(/^\/jobs\/([a-f0-9-]{20,64})\/?$/i);
+      setError("");
+      if (!match) {
+        setJob(null);
+        setBusy(false);
+        return;
+      }
+      const controller = new AbortController();
+      jobRouteAbortRef.current = controller;
+      setJob(null);
+      setBusy(true);
+      try {
+        const response = await fetch(`/api/jobs/${match[1]}`, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) {
+          const routeCopy = routeErrorCopyRef.current;
+          throw new Error(response.status === 404 ? routeCopy.jobMissing : routeCopy.startFailed);
+        }
+        const nextJob = await response.json() as Job;
+        if (jobNavigationRevisionRef.current === revision) setJob(nextJob);
+      } catch (cause) {
+        if (!controller.signal.aborted && jobNavigationRevisionRef.current === revision) {
+          setError(translateServerError(cause instanceof Error ? cause.message : String(cause), languageRef.current));
+        }
+      } finally {
+        if (!controller.signal.aborted && jobNavigationRevisionRef.current === revision) setBusy(false);
+        if (jobRouteAbortRef.current === controller) jobRouteAbortRef.current = null;
+      }
+    };
+    void syncJobRoute();
+    window.addEventListener("popstate", syncJobRoute);
+    return () => {
+      jobNavigationRevisionRef.current += 1;
+      jobRouteAbortRef.current?.abort();
+      jobRouteAbortRef.current = null;
+      window.removeEventListener("popstate", syncJobRoute);
+    };
   }, []);
 
   useEffect(() => {
     if (!job?.id || job.status === "done" || job.status === "failed") return undefined;
-    const timer = window.setInterval(async () => {
+    const expectedJobId = job.id;
+    const controller = new AbortController();
+    let polling = false;
+    jobPollAbortRef.current?.abort();
+    jobPollAbortRef.current = controller;
+    const poll = async () => {
+      if (polling || controller.signal.aborted) return;
+      polling = true;
       try {
-        const response = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" });
+        const response = await fetch(`/api/jobs/${expectedJobId}`, { cache: "no-store", signal: controller.signal });
         if (response.status === 404) {
           // 管理员可能删除任务：停止轮询，标记为失败而不是重复请求。
-          setJob((current) => current ? { ...current, status: "failed", error: t.jobMissing } : current);
+          setJob((current) => current?.id === expectedJobId ? { ...current, status: "failed", error: t.jobMissing } : current);
           return;
         }
         if (!response.ok) throw new Error(t.jobMissing);
-        setJob(await response.json() as Job);
-      } catch (pollError) { setError(translateServerError(pollError instanceof Error ? pollError.message : String(pollError), language)); }
-    }, 1200);
-    return () => window.clearInterval(timer);
+        const nextJob = await response.json() as Job;
+        if (!controller.signal.aborted) {
+          setJob((current) => current?.id === expectedJobId ? nextJob : current);
+        }
+      } catch (pollError) {
+        if (!controller.signal.aborted) {
+          setError(translateServerError(pollError instanceof Error ? pollError.message : String(pollError), language));
+        }
+      } finally {
+        polling = false;
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 1200);
+    return () => {
+      window.clearInterval(timer);
+      controller.abort();
+      if (jobPollAbortRef.current === controller) jobPollAbortRef.current = null;
+    };
   }, [job?.id, job?.status, language, t.jobMissing]);
 
   async function startAnalysis(event?: FormEvent) {
     event?.preventDefault();
     if (generatingSchema) return;
+    if (outputSchemaNeedsReview) {
+      setSchemaActionError(t.schemaNeedsReview);
+      setEditorInitialSchema(outputSchema);
+      setEditorInitialFieldDescriptions([]);
+      setSchemaDialogInitialView("review");
+      schemaDialogReturnFocusRef.current = advancedTriggerRef.current;
+      setShowAdvancedSettings(true);
+      return;
+    }
+    jobRouteAbortRef.current?.abort();
+    jobRouteAbortRef.current = null;
+    jobPollAbortRef.current?.abort();
+    const navigationRevision = jobNavigationRevisionRef.current + 1;
+    jobNavigationRevisionRef.current = navigationRevision;
     setBusy(true); setError(""); setJob(null); setUploadPercent(null);
     try {
       if (composedInstruction.length > MAX_ANALYSIS_INSTRUCTION_CHARS) throw new Error(t.requestTooLong);
       const parsedOutputSchema = parseOutputSchema(outputSchema, t.invalidSchema);
       if (mode === "upload") {
         if (!file) throw new Error(t.missingFile);
-        const jobId = await uploadWithProgress(file, parsedOutputSchema);
+        const jobId = await uploadWithProgress(file, parsedOutputSchema, navigationRevision);
+        if (jobNavigationRevisionRef.current !== navigationRevision) return;
         const jobResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
-        setJob(await jobResponse.json() as Job);
+        if (!jobResponse.ok) throw new Error(jobResponse.status === 404 ? t.jobMissing : t.startFailed);
+        const nextJob = await jobResponse.json() as Job;
+        if (jobNavigationRevisionRef.current !== navigationRevision) return;
+        setJob(nextJob);
         window.history.replaceState({}, "", `/jobs/${jobId}`);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
         const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: composedInstruction || undefined, outputSchema: parsedOutputSchema }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
         if (!response.ok) throw new Error(body.error || t.startFailed);
+        if (!body.jobId) throw new Error(t.startFailed);
+        if (jobNavigationRevisionRef.current !== navigationRevision) return;
         const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
-        setJob(await jobResponse.json() as Job);
+        if (!jobResponse.ok) throw new Error(jobResponse.status === 404 ? t.jobMissing : t.startFailed);
+        const nextJob = await jobResponse.json() as Job;
+        if (jobNavigationRevisionRef.current !== navigationRevision) return;
+        setJob(nextJob);
         window.history.replaceState({}, "", `/jobs/${body.jobId}`);
       }
     } catch (submitError) {
+      if (jobNavigationRevisionRef.current !== navigationRevision) return;
       const message = submitError instanceof Error ? submitError.message : String(submitError);
       const clientMessage = message === t.missingFile || message === t.missingUrl || message === t.invalidSchema || message === t.requestTooLong;
       setError(clientMessage ? message : translateServerError(message, language));
       if (message === t.missingUrl) urlInputRef.current?.focus();
       if (message === t.missingFile) dropZoneRef.current?.focus();
-    } finally { setBusy(false); setUploadPercent(null); }
+    } finally {
+      if (jobNavigationRevisionRef.current === navigationRevision) {
+        setBusy(false);
+        setUploadPercent(null);
+      }
+    }
   }
 
   // 用 XMLHttpRequest 上传以拿到真实进度；返回创建的任务 id。
-  function uploadWithProgress(video: File, parsedOutputSchema: unknown): Promise<string> {
+  function uploadWithProgress(video: File, parsedOutputSchema: unknown, navigationRevision: number): Promise<string> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `/api/analyze/upload?lang=${language}`);
       xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) setUploadPercent(Math.round((event.loaded / event.total) * 100));
+        if (event.lengthComputable && jobNavigationRevisionRef.current === navigationRevision) {
+          setUploadPercent(Math.round((event.loaded / event.total) * 100));
+        }
       };
       xhr.onload = () => {
         let body: { jobId?: string; error?: string } = {};
@@ -695,18 +795,12 @@ function App() {
     await startAnalysis();
   }
 
-  async function openHistoryJob(id: string) {
-    setBusy(true); setError("");
-    try {
-      const response = await fetch(`/api/jobs/${id}`, { cache: "no-store" });
-      if (!response.ok) throw new Error(response.status === 404 ? t.jobMissing : t.startFailed);
-      setJob(await response.json() as Job);
-      setShowHistory(false);
-      window.history.pushState({}, "", `/jobs/${id}`);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (cause) {
-      setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language));
-    } finally { setBusy(false); }
+  function openHistoryJob(id: string) {
+    const path = `/jobs/${id}`;
+    setShowHistory(false);
+    if (window.location.pathname !== path) window.history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function deleteOwnedJob(id: string): Promise<boolean> {
@@ -720,7 +814,19 @@ function App() {
     return true;
   }
 
-  function leaveJob() { setJob(null); setFile(null); setUrl(""); setError(""); window.history.pushState({}, "", "/"); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function leaveJob() {
+    jobNavigationRevisionRef.current += 1;
+    jobRouteAbortRef.current?.abort();
+    jobRouteAbortRef.current = null;
+    jobPollAbortRef.current?.abort();
+    setJob(null);
+    setFile(null);
+    setUrl("");
+    setError("");
+    setUploadPercent(null);
+    window.history.pushState({}, "", "/");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   function restartAnalysis() { leaveJob(); }
   // 回到 landing 后把焦点放到 URL 输入框（结果页点“重新开始”时），
   // 用 effect 而不是 setTimeout 猜渲染时机。
@@ -800,6 +906,10 @@ function App() {
     }
   }
 
+  function cancelOutputSchemaGeneration() {
+    schemaGenerationAbortRef.current?.abort();
+  }
+
   function saveCurrentAsDefault() {
     updateAnalysisDraft(window.localStorage, currentAnalysisDraft);
     const stored = saveAnalysisDefault(window.localStorage, currentAnalysisDraft);
@@ -814,6 +924,7 @@ function App() {
     setSuggestionIds(stored.draft.suggestionIds.filter(isAnalysisSuggestionId));
     setOutputSchema(stored.draft.outputSchema);
     setFieldDescriptions(stored.draft.fieldDescriptions ?? []);
+    setOutputSchemaRequestKey(stored.draft.outputSchemaRequestKey ?? "");
     setDefaultConfig(stored.defaultConfig);
     setSchemaActionError("");
     setConfigNotice(t.defaultRestored);
@@ -869,15 +980,15 @@ function App() {
                 return <button key={suggestion.id} type="button" disabled={generatingSchema} className={selected ? "selected" : ""} aria-pressed={selected} aria-label={`${suggestion.label}: ${suggestion.description}`} onClick={() => toggleSuggestion(suggestion.id)}><i aria-hidden="true">{selected ? "✓" : "+"}</i><span><strong>{suggestion.label}</strong><small>{suggestion.description}</small></span></button>;
               })}</div>
             </div>
-            <div className={`json-workflow ${hasOutputSchema ? "configured" : ""}`}>
+            <div className={`json-workflow ${hasOutputSchema && !outputSchemaNeedsReview ? "configured" : ""}`}>
               <div className="json-workflow-main">
-                <div className="json-workflow-status"><span aria-hidden="true" /><div><strong>{hasOutputSchema ? t.jsonReady : t.jsonAutomatic}</strong><small>{hasOutputSchema ? t.jsonReadyHint : t.jsonAutomaticHint}</small></div></div>
+                <div className="json-workflow-status"><span aria-hidden="true" /><div><strong>{outputSchemaNeedsReview ? t.jsonNeedsReview : hasOutputSchema ? t.jsonReady : t.jsonAutomatic}</strong><small>{outputSchemaNeedsReview ? t.jsonNeedsReviewHint : hasOutputSchema ? t.jsonReadyHint : t.jsonAutomaticHint}</small></div></div>
                 <div className="json-workflow-actions">
-                  <button ref={schemaGenerateTriggerRef} className="json-ai-button" type="button" disabled={generatingSchema} onClick={generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.buildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
-                  <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setEditorInitialFieldDescriptions(fieldDescriptions); setSchemaDialogInitialView("edit"); schemaDialogReturnFocusRef.current = advancedTriggerRef.current; setShowAdvancedSettings(true); }}>{hasOutputSchema ? t.editJson : t.defineJson}</button>
+                  <button ref={schemaGenerateTriggerRef} className="json-ai-button" type="button" onClick={generatingSchema ? cancelOutputSchemaGeneration : generateOutputSchema}><Glyph name="spark" size={15} />{generatingSchema ? t.cancelBuildingJson : (hasOutputSchema ? t.updateJson : t.buildJson)}</button>
+                  <button ref={advancedTriggerRef} className="json-edit-button" type="button" disabled={generatingSchema} aria-haspopup="dialog" aria-expanded={showAdvancedSettings} onClick={() => { setSchemaActionError(""); setEditorInitialSchema(outputSchema); setEditorInitialFieldDescriptions(outputSchemaNeedsReview ? [] : fieldDescriptions); setSchemaDialogInitialView(outputSchemaNeedsReview ? "review" : "edit"); schemaDialogReturnFocusRef.current = advancedTriggerRef.current; setShowAdvancedSettings(true); }}>{outputSchemaNeedsReview ? t.reviewJson : hasOutputSchema ? t.editJson : t.defineJson}</button>
                 </div>
               </div>
-              {hasOutputSchema && <OutputFieldSummaryView summary={outputFieldSummary} fieldDescriptions={fieldDescriptions} language={language} />}
+              {hasOutputSchema && <OutputFieldSummaryView summary={outputFieldSummary} fieldDescriptions={outputSchemaNeedsReview ? [] : fieldDescriptions} language={language} />}
             </div>
             {schemaActionError && <p className="analysis-config-error" role="alert">{schemaActionError}</p>}
             <div className="config-memory"><span><i aria-hidden="true" />{configNotice || t.configAutosaved}</span><div><button type="button" disabled={generatingSchema} onClick={saveCurrentAsDefault}>{t.saveDefault}</button><button type="button" disabled={generatingSchema || !defaultConfig} onClick={restoreSavedDefault}>{t.restoreDefault}</button></div></div>
@@ -893,6 +1004,7 @@ function App() {
     {showAdvancedSettings && <AdvancedSettingsDialog language={language} outputSchema={editorInitialSchema} fieldDescriptions={editorInitialFieldDescriptions} initialView={schemaDialogInitialView} returnFocusRef={schemaDialogReturnFocusRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
       setOutputSchema(next.outputSchema);
       setFieldDescriptions(next.fieldDescriptions);
+      setOutputSchemaRequestKey(next.outputSchema.trim() ? currentAnalysisRequestKey : "");
       setShowAdvancedSettings(false);
       setSchemaActionError("");
       setConfigNotice("");
@@ -1117,8 +1229,9 @@ function AdvancedSettingsDialog({ language, outputSchema, fieldDescriptions, ini
   }
   const completeFieldSummary = summarizeOutputSchema(draftSchema, language, Number.MAX_SAFE_INTEGER);
   const fieldSummary: OutputSchemaSummary = { fields: completeFieldSummary.fields.slice(0, 64), total: completeFieldSummary.total };
-  const fieldPaths = new Set(completeFieldSummary.fields.map((field) => field.path));
-  const activeFieldDescriptions = fieldDescriptions.filter((field) => fieldPaths.has(field.path));
+  const fieldTypes = new Map(completeFieldSummary.fields.map((field) => [field.path, field.type]));
+  const initialFieldTypes = new Map(summarizeOutputSchema(outputSchema, language, Number.MAX_SAFE_INTEGER).fields.map((field) => [field.path, field.type]));
+  const activeFieldDescriptions = fieldDescriptions.filter((field) => fieldTypes.has(field.path) && fieldTypes.get(field.path) === initialFieldTypes.get(field.path));
   const isReview = view === "review";
 
   function formatDraftSchema() {
@@ -1153,6 +1266,10 @@ function AdvancedSettingsDialog({ language, outputSchema, fieldDescriptions, ini
   function submitSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isReview) {
+      if (!draftSchema.trim()) {
+        onApply({ outputSchema: "", fieldDescriptions: [] });
+        return;
+      }
       previewFields();
       return;
     }
@@ -1176,13 +1293,13 @@ function AdvancedSettingsDialog({ language, outputSchema, fieldDescriptions, ini
       <footer className={`advanced-dialog-foot ${isReview ? "review" : "edit"}`}>
         <button className="advanced-dialog-cancel" type="button" onClick={onCancel}>{t.cancelSettings}</button>
         {isReview && <button className="advanced-dialog-cancel" type="button" onClick={editJson}>{t.editJsonStructure}</button>}
-        <button className="primary-button" type="submit" disabled={isReview ? !fieldSummary.total : Boolean(dialogError) || !draftSchema.trim()}>{isReview ? t.confirmFields : t.previewFields}<Glyph name="arrow" size={17} /></button>
+        <button className="primary-button" type="submit" disabled={isReview ? !fieldSummary.total : Boolean(dialogError)}>{isReview ? t.confirmFields : draftSchema.trim() ? t.previewFields : t.useAutomaticFields}<Glyph name="arrow" size={17} /></button>
       </footer>
     </form>
   </dialog>;
 }
 
-function HistoryModal({ onClose, onOpen, onDelete, language }: { onClose: () => void; onOpen: (id: string) => Promise<void>; onDelete: (id: string) => Promise<boolean>; language: Language }) {
+function HistoryModal({ onClose, onOpen, onDelete, language }: { onClose: () => void; onOpen: (id: string) => void; onDelete: (id: string) => Promise<boolean>; language: Language }) {
   const t = copy[language];
   const [jobs, setJobs] = useState<JobHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);

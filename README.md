@@ -28,6 +28,10 @@ Open `http://localhost:5173`.
 
 Without API keys, Koma runs in mock mode. AI-built JSON shapes, custom extraction, and generated files require a real vision provider. See [Configuration](docs/CONFIGURATION.md).
 
+## Data and privacy
+
+Koma sends audio to the configured speech provider and key frames plus transcript context to the configured vision provider. Videos, frames, results, and generated files remain stored for replay until the submitting browser or an administrator deletes the job. Anyone with the unguessable replay link can view it; clearing site data or switching browsers removes access to that browser's “My jobs” controls. See [Administration](docs/ADMIN.md) for the full data boundary.
+
 ## CLI
 
 ```bash

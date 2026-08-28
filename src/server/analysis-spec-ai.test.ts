@@ -120,6 +120,13 @@ describe("generateAnalysisSpec", () => {
     expect((error as Error).message).not.toContain("network internals");
   });
 
+  it("preserves cancellation so callers can stop an abandoned generation", async () => {
+    const aborted = new DOMException("cancelled", "AbortError");
+    await expect(generateAnalysisSpec({ instruction: "提取人物", provider }, {
+      requestChatCompletion: async () => { throw aborted; }
+    })).rejects.toBe(aborted);
+  });
+
   it("validates the user request with a 400 status before generation", () => {
     expect(() => validateAnalysisSpecGenerationInstruction(undefined)).toThrowError(AnalysisSpecAiError);
     try {

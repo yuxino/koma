@@ -74,10 +74,21 @@ app.post("/api/analysis-spec/generate", { bodyLimit: 16 * 1024 }, async (request
   }
   // Invalid input must not consume the same public demo allowance used by analysis jobs.
   if (!acceptDemoRequest(request, reply)) return;
+  const controller = new AbortController();
+  const abortGeneration = () => controller.abort();
+  const abortOnClosedResponse = () => {
+    if (!reply.raw.writableEnded) abortGeneration();
+  };
+  request.raw.once("aborted", abortGeneration);
+  reply.raw.once("close", abortOnClosedResponse);
   try {
-    return reply.send(await generateAnalysisSpec({ instruction, additions, language }));
+    return reply.send(await generateAnalysisSpec({ instruction, additions, language, signal: controller.signal }));
   } catch (error) {
+    if (controller.signal.aborted) return;
     return reply.code(statusCodeOf(error) || 502).send({ error: messageOf(error) });
+  } finally {
+    request.raw.off("aborted", abortGeneration);
+    reply.raw.off("close", abortOnClosedResponse);
   }
 });
 
@@ -236,7 +247,7 @@ app.get("/api/jobs/:id/artifacts/:artifactId", async (request: FastifyRequest<{ 
   return sendStoredObject(request, reply, artifact.storageKey, artifact.mimeType, contentDisposition(artifact.name));
 });
 
-app.delete("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+app.delete("/api/jobs/:id", async (_request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
   return reply.code(405).header("allow", "GET").send({ error: "公开回看链接不能直接删除任务，请从“我的任务”删除自己提交的内容。" });
 });
 

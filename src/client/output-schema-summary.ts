@@ -89,11 +89,16 @@ export function summarizeOutputSchema(serialized: string, language: OutputSchema
     return { fields: [], total: 0 };
   }
 
-  const allFields: OutputFieldSummary[] = [];
-  if (isJsonSchema(parsed)) visitJsonSchema(parsed, "", language, allFields);
-  else visitExampleValue(parsed, "", language, allFields);
-  const safeLimit = Math.max(0, visibleLimit);
-  return { fields: allFields.slice(0, safeLimit), total: allFields.length };
+  try {
+    const allFields: OutputFieldSummary[] = [];
+    if (isJsonSchema(parsed)) visitJsonSchema(parsed, "", language, allFields);
+    else visitExampleValue(parsed, "", language, allFields);
+    const safeLimit = Math.max(0, visibleLimit);
+    return { fields: allFields.slice(0, safeLimit), total: allFields.length };
+  } catch {
+    // A malformed browser draft must not take down the whole application.
+    return { fields: [], total: 0 };
+  }
 }
 
 export function attachFieldDescriptions(summary: OutputSchemaSummary, descriptions: AnalysisFieldDescription[] = []): PresentedOutputSchemaSummary {

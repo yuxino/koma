@@ -51,6 +51,8 @@ npm i -g pm2
 
 Example nginx configuration:
 
+This is only the upstream HTTP portion. Before exposing Koma publicly, terminate TLS in front of nginx or add a certificate-backed `listen 443 ssl` server and redirect port 80 to HTTPS. Never send `/admin` credentials or session cookies over public plain HTTP.
+
 ```nginx
 server {
     listen 80;
@@ -80,7 +82,7 @@ nginx -t && systemctl reload nginx
 
 ## Deployment
 
-The GitHub Actions workflow builds the application, copies the required files to `~/koma`, installs production dependencies, writes `.env`, and reloads the PM2 process. Secrets are read when the workflow runs, so redeploy after adding or changing any runtime Secret.
+Run the **Deploy Koma** workflow manually from the repository's Actions page. It checks and builds the application, copies the required files to `~/koma`, installs production dependencies, writes `.env`, and reloads the PM2 process. A normal push to `main` runs CI only and never deploys production. Secrets are read when the workflow runs, so redeploy after adding or changing any runtime Secret.
 
 Equivalent PM2 command:
 
@@ -92,7 +94,7 @@ pm2 save
 ## Verify
 
 ```bash
-curl http://koma.yuxino.cn/api/health
+curl https://koma.yuxino.cn/api/health
 pm2 status
 pm2 logs koma
 ```

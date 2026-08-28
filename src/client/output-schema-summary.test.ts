@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { attachFieldDescriptions, summarizeOutputSchema } from "./output-schema-summary.js";
 
 describe("summarizeOutputSchema", () => {
+  it("fails closed instead of overflowing on a maliciously deep browser draft", () => {
+    const serialized = `${"[".repeat(5_000)}0${"]".repeat(5_000)}`;
+    expect(summarizeOutputSchema(serialized, "en")).toEqual({ fields: [], total: 0 });
+  });
+
   it("lists nested example leaves with stable array paths and localized meanings", () => {
     expect(summarizeOutputSchema(JSON.stringify({
       emotions: [{ label: "string", evidence: "string", startMs: 0, endMs: 0 }]

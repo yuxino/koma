@@ -101,11 +101,13 @@ describe("remote duration probe", () => {
 
   it("reads the duration from the head bytes over Range without downloading the whole file", async () => {
     const server = await startVideoServer(probeVideoPath);
+    const probeRoot = join(tempDirs[0], "missing-probe-root");
     try {
-      const durationMs = await probeRemoteVideoDuration(`http://127.0.0.1:${server.port}/probe.mp4`, {});
+      const durationMs = await probeRemoteVideoDuration(`http://127.0.0.1:${server.port}/probe.mp4`, {}, { tempRoot: probeRoot });
       // 3 秒视频：允许 ±500ms 的容器时间戳误差
       expect(durationMs).toBeGreaterThan(2500);
       expect(durationMs).toBeLessThan(3500);
+      expect(statSync(probeRoot).isDirectory()).toBe(true);
       // 视频本身只有几十 KB，探测应该只拉了头部（远小于 4MB 上限即视为通过）
       expect(server.transferred()).toBeLessThan(1024 * 1024);
     } finally {

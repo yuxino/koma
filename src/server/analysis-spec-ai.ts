@@ -67,7 +67,8 @@ export async function generateAnalysisSpec(
       maxTokens: config.visionMaxTokens,
       signal
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     throw new AnalysisSpecAiError("生成 JSON 配置时模型请求失败，请稍后重试。", 502, "upstream");
   }
   return parseGeneratedAnalysisSpec(content);

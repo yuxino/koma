@@ -22,6 +22,7 @@ export interface AnalysisDraft {
   instruction: string;
   suggestionIds: string[];
   outputSchema: string;
+  outputSchemaRequestKey?: string;
   fieldDescriptions?: AnalysisFieldDescription[];
 }
 
@@ -37,6 +38,14 @@ export interface StorageLike {
 }
 
 const allowedSuggestionIds = new Set<string>(ANALYSIS_SUGGESTION_IDS);
+
+/** Build a stable identity for the request that an output schema was confirmed against. */
+export function analysisRequestKey(instruction: string, suggestionIds: readonly string[]): string {
+  const normalizedSuggestionIds = [...new Set(
+    suggestionIds.filter((candidate) => allowedSuggestionIds.has(candidate))
+  )].sort();
+  return JSON.stringify([instruction.trim(), normalizedSuggestionIds]);
+}
 
 export function createEmptyAnalysisDraft(): AnalysisDraft {
   return { instruction: "", suggestionIds: [], outputSchema: "" };
@@ -132,11 +141,16 @@ function normalizeDraft(value: unknown): AnalysisDraft | undefined {
     seen.add(candidate);
     suggestionIds.push(candidate);
   }
+  const outputSchema = value.outputSchema.slice(0, MAX_OUTPUT_SCHEMA_CHARS);
+  const outputSchemaRequestKey = outputSchema.trim()
+    ? normalizeAnalysisRequestKey(value.outputSchemaRequestKey)
+    : undefined;
   const fieldDescriptions = normalizeFieldDescriptions(value.fieldDescriptions);
   return {
     instruction: value.instruction.slice(0, MAX_ANALYSIS_INSTRUCTION_CHARS),
     suggestionIds,
-    outputSchema: value.outputSchema.slice(0, MAX_OUTPUT_SCHEMA_CHARS),
+    outputSchema,
+    ...(outputSchemaRequestKey ? { outputSchemaRequestKey } : {}),
     ...(fieldDescriptions.length ? { fieldDescriptions } : {})
   };
 }
@@ -146,8 +160,28 @@ function cloneDraft(value: AnalysisDraft): AnalysisDraft {
     instruction: value.instruction,
     suggestionIds: [...value.suggestionIds],
     outputSchema: value.outputSchema,
+    ...(value.outputSchema.trim() && value.outputSchemaRequestKey
+      ? { outputSchemaRequestKey: value.outputSchemaRequestKey }
+      : {}),
     ...(value.fieldDescriptions ? { fieldDescriptions: value.fieldDescriptions.map((field) => ({ ...field })) } : {})
   };
+}
+
+function normalizeAnalysisRequestKey(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)
+      || parsed.length !== 2
+      || typeof parsed[0] !== "string"
+      || parsed[0].length > MAX_ANALYSIS_INSTRUCTION_CHARS
+      || !Array.isArray(parsed[1])
+      || parsed[1].some((candidate) => typeof candidate !== "string")) return undefined;
+    const normalized = analysisRequestKey(parsed[0], parsed[1]);
+    return normalized === value ? normalized : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeFieldDescriptions(value: unknown): AnalysisFieldDescription[] {

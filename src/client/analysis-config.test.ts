@@ -3,6 +3,7 @@ import {
   ANALYSIS_CONFIG_STORAGE_KEY,
   MAX_ANALYSIS_INSTRUCTION_CHARS,
   MAX_OUTPUT_SCHEMA_CHARS,
+  analysisRequestKey,
   createEmptyAnalysisDraft,
   loadAnalysisConfig,
   restoreAnalysisDefault,
@@ -30,6 +31,15 @@ const draft = (overrides: Partial<AnalysisDraft> = {}): AnalysisDraft => ({
   suggestionIds: ["extract"],
   outputSchema: '{"items":[{"name":"string","price":0,"atMs":0}]}',
   ...overrides
+});
+
+describe("analysisRequestKey", () => {
+  it("trims the request and normalizes legal suggestion IDs into a stable order", () => {
+    expect(analysisRequestKey("  提取商品  ", ["report", "unknown", "extract", "report"]))
+      .toBe(analysisRequestKey("提取商品", ["extract", "report"]));
+    expect(analysisRequestKey("提取商品", ["extract"]))
+      .not.toBe(analysisRequestKey("提取人物", ["extract"]));
+  });
 });
 
 describe("loadAnalysisConfig", () => {
@@ -146,6 +156,40 @@ describe("loadAnalysisConfig", () => {
       { path: "plates[].plateNumber", label: "车牌号码", description: "视频中识别到的完整车牌号码", source: "request" },
       { path: "plates[].atMs", label: "首次出现时间", description: "车牌首次出现的时间，单位为毫秒", source: "addition" }
     ]);
+  });
+
+  it("keeps a valid schema request key while remaining compatible with legacy drafts", () => {
+    const storage = new MemoryStorage();
+    const legacy = draft();
+    storage.setItem(ANALYSIS_CONFIG_STORAGE_KEY, JSON.stringify({ version: 1, draft: legacy }));
+    expect(loadAnalysisConfig(storage).draft).toEqual(legacy);
+
+    const outputSchemaRequestKey = analysisRequestKey("提取商品", ["report", "extract"]);
+    const keyed = draft({ instruction: "后来修改的要求", outputSchemaRequestKey });
+    updateAnalysisDraft(storage, keyed);
+
+    expect(loadAnalysisConfig(storage).draft).toEqual(keyed);
+    expect(saveAnalysisDefault(storage).defaultConfig).toEqual(keyed);
+    updateAnalysisDraft(storage, draft({ instruction: "临时要求", outputSchemaRequestKey: undefined }));
+    expect(restoreAnalysisDefault(storage).draft).toEqual(keyed);
+  });
+
+  it("drops malformed schema request keys and keys attached to an empty schema", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(ANALYSIS_CONFIG_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      draft: draft({ outputSchemaRequestKey: "not-a-request-key" }),
+      defaultConfig: draft({
+        outputSchema: "  ",
+        outputSchemaRequestKey: analysisRequestKey("提取商品", ["extract"])
+      })
+    }));
+
+    expect(loadAnalysisConfig(storage)).toEqual({
+      version: 1,
+      draft: draft(),
+      defaultConfig: draft({ outputSchema: "  " })
+    });
   });
 });
 

@@ -1,5 +1,4 @@
-import { createWriteStream } from "node:fs";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -29,10 +28,10 @@ const PROBE_HEAD_BYTES = 4 * 1024 * 1024;
 export async function probeRemoteVideoDuration(
   url: string,
   headers: Record<string, string>,
-  options: { signal?: AbortSignal; timeoutMs?: number } = {}
+  options: { signal?: AbortSignal; timeoutMs?: number; tempRoot?: string } = {}
 ): Promise<number | null> {
-  const { signal, timeoutMs = 15_000 } = options;
-  const probePath = join(config.tempRoot, `koma-probe-${randomUUID()}.mp4`);
+  const { signal, timeoutMs = 15_000, tempRoot = config.tempRoot } = options;
+  const probePath = join(tempRoot, `koma-probe-${randomUUID()}.mp4`);
   try {
     const response = await fetch(url, {
       redirect: "follow",
@@ -49,23 +48,23 @@ export async function probeRemoteVideoDuration(
     const readLimit = declaredLength > 0 ? Math.min(PROBE_HEAD_BYTES, declaredLength) : PROBE_HEAD_BYTES;
     const reader = response.body.getReader();
     let received = 0;
-    const file = createWriteStream(probePath);
+    const chunks: Buffer[] = [];
     try {
       while (received < readLimit) {
         const { done, value } = await reader.read();
         if (done) break;
         const remaining = readLimit - received;
         const chunk = value.length > remaining ? value.subarray(0, remaining) : value;
-        file.write(chunk);
+        chunks.push(Buffer.from(chunk));
         received += chunk.length;
         if (chunk.length < value.length) break; // 到达探测上限，提前截断
       }
     } finally {
-      file.end();
-      await new Promise<void>((resolve) => file.on("close", resolve));
-      reader.cancel().catch(() => undefined);
+      await reader.cancel().catch(() => undefined);
     }
     if (received < 1024) return null;
+    await mkdir(tempRoot, { recursive: true });
+    await writeFile(probePath, Buffer.concat(chunks, received));
     const output = await runCommand(ffprobeBin, [
       "-v", "error",
       "-show_entries", "format=duration",
