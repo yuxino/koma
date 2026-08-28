@@ -1,6 +1,8 @@
-# Koma
-
-[简体中文](README.zh-CN.md)
+<div align="center">
+  <img src="docs/images/koma-readme-icon.png" width="112" alt="Koma icon">
+  <h1>Koma</h1>
+  <p><a href="README.zh-CN.md">简体中文</a></p>
+</div>
 
 Koma is a self-hosted AI video understanding app that turns local files and public video links into replayable results with summaries, chapters, subtitles, key frames, custom structured data, and downloadable text files.
 

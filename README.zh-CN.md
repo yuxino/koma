@@ -1,6 +1,8 @@
-# Koma
-
-[English](README.md)
+<div align="center">
+  <img src="docs/images/koma-readme-icon.png" width="112" alt="Koma 图标">
+  <h1>Koma</h1>
+  <p><a href="README.md">English</a></p>
+</div>
 
 Koma 是一个可自行部署的 AI 视频理解应用，把本地视频或公开视频链接整理成可回看、可定位的结果，包括总结、章节、字幕、关键帧、结构化数据和可下载文本文件。
 
