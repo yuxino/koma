@@ -4,9 +4,9 @@ Koma 的分析任务是异步的。提交视频后轮询任务，完成后既可
 
 ## 分析权限
 
-配置 `ADMIN_PASSWORD` 后，`POST /api/analysis-spec/generate`、`POST /api/analyze/url` 和 `POST /api/analyze/upload` 都要求同时携带由 `POST /api/admin/login` 建立的 `koma_admin` 管理员会话，以及同源请求头 `x-koma-admin: 1`。请求头正确但未登录时返回 `401`；请求头缺失或错误时返回 `403`。管理员登录后，Koma 浏览器界面会自动发送 HttpOnly Cookie 和该请求头；API 客户端需要自行保存 Cookie 并补上请求头。
+AI JSON 生成和视频地址/文件分析默认对游客开放，即使 `ADMIN_PASSWORD` 已启用 `/admin` 也不会改变。只有同时配置 `ADMIN_PASSWORD` 与 `ANALYSIS_REQUIRE_ADMIN=true` 后，`POST /api/analysis-spec/generate`、`POST /api/analyze/url` 和 `POST /api/analyze/upload` 才要求携带由 `POST /api/admin/login` 建立的 `koma_admin` 管理员会话，以及同源请求头 `x-koma-admin: 1`。请求头正确但未登录时返回 `401`；请求头缺失或错误时返回 `403`。管理员登录后，Koma 浏览器界面会自动发送 HttpOnly Cookie 和该请求头；API 客户端需要自行保存 Cookie 并补上请求头。
 
-`ADMIN_PASSWORD` 为空时，这三个接口保持免账号公开使用。只读任务和回看接口在两种模式下都不变。
+只读任务和回看接口在两种模式下都不变。
 
 下方提交示例默认使用公开模式。受保护模式应先登录一次并保存 Cookie：
 
@@ -83,7 +83,7 @@ curl -X POST http://localhost:3000/api/analyze/url \
 { "jobId": "..." }
 ```
 
-`ADMIN_PASSWORD` 为空时，视频地址提交接口对外公开。Koma 尚未完整阻止重定向或解析到私有、链路本地地址的域名。管理员登录只能限制调用者，不能充当出站网络隔离；公开部署仍应配置出站策略或可信 URL 白名单。
+未设置 `ANALYSIS_REQUIRE_ADMIN=true` 时，视频地址提交接口对外公开。Koma 尚未完整阻止重定向或解析到私有、链路本地地址的域名。管理员登录只能限制调用者，不能充当出站网络隔离；公开部署仍应配置出站策略或可信 URL 白名单。
 
 ## 本地上传
 

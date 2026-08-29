@@ -4,9 +4,9 @@ Koma analysis jobs are asynchronous. Submit a video, poll the job, then retrieve
 
 ## Analysis access
 
-When `ADMIN_PASSWORD` is configured, `POST /api/analysis-spec/generate`, `POST /api/analyze/url`, and `POST /api/analyze/upload` require both the existing `koma_admin` session created by `POST /api/admin/login` and the same-origin request header `x-koma-admin: 1`. With that header present, an unauthenticated request returns `401`; a missing or incorrect header returns `403`. After administrator sign-in, the Koma browser UI sends the HttpOnly cookie and request header automatically. API clients must preserve the cookie and add the header themselves.
+AI JSON generation and URL/upload analysis are public by default, including when `ADMIN_PASSWORD` enables `/admin`. When both `ADMIN_PASSWORD` and `ANALYSIS_REQUIRE_ADMIN=true` are configured, `POST /api/analysis-spec/generate`, `POST /api/analyze/url`, and `POST /api/analyze/upload` require both the existing `koma_admin` session created by `POST /api/admin/login` and the same-origin request header `x-koma-admin: 1`. With that header present, an unauthenticated request returns `401`; a missing or incorrect header returns `403`. After administrator sign-in, the Koma browser UI sends the HttpOnly cookie and request header automatically. API clients must preserve the cookie and add the header themselves.
 
-When `ADMIN_PASSWORD` is empty, these three endpoints keep their account-free public behavior. Read-only job and replay endpoints are unchanged in either mode.
+Read-only job and replay endpoints are unchanged in either mode.
 
 The submission examples below assume that public mode. In protected mode, sign in once and save the cookie:
 
@@ -83,7 +83,7 @@ The endpoint responds with `202`. The ID also forms the permanent, unguessable r
 { "jobId": "..." }
 ```
 
-With `ADMIN_PASSWORD` empty, URL submission is public. Koma does not yet comprehensively block redirects or hostnames that resolve to private or link-local addresses. Administrator authentication limits who can call this endpoint, but it is not an outbound network boundary; public deployments still need an egress policy or a trusted URL allowlist.
+Unless `ANALYSIS_REQUIRE_ADMIN=true`, URL submission is public. Koma does not yet comprehensively block redirects or hostnames that resolve to private or link-local addresses. Administrator authentication limits who can call this endpoint, but it is not an outbound network boundary; public deployments still need an egress policy or a trusted URL allowlist.
 
 ## Local upload
 

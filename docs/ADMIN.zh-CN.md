@@ -2,8 +2,8 @@
 
 Koma 把产品和运营能力分开：
 
-- `ADMIN_PASSWORD` 为空时，普通访客免登录提交，获得不可猜的 `/jobs/<id>` 永久回看链接；当前浏览器还能在“我的任务”里查看和删除自己提交的任务。
-- 配置 `ADMIN_PASSWORD` 后，同一个管理员会话还会保护 AI JSON 生成、视频地址提交和文件上传；拿到链接的人仍可读取只读回看页面。
+- 普通访客免登录提交，获得不可猜的 `/jobs/<id>` 永久回看链接；当前浏览器还能在“我的任务”里查看和删除自己提交的任务。
+- `ADMIN_PASSWORD` 只保护运营后台，不会关闭游客分析。仅当 AI JSON 生成、视频地址提交和文件上传也需要设为私有时，才设置 `ANALYSIS_REQUIRE_ADMIN=true`；拿到链接的人仍可读取只读回看页面。
 - `/admin` 是受保护的运营后台，用于管理 Provider、密钥、任务和永久删除。
 - 任务历史里的“详情”会展示当次分析结果、提取要求、期望 JSON 结构、输出文件格式，以及不含密钥的 Provider/模型快照。
 - 当前不做公开用户账号系统。任务归属使用长期 HttpOnly 匿名 Cookie，数据库只保存令牌哈希；分享链接的其他访问者只能查看，不能据此删除任务。
@@ -15,10 +15,11 @@ Koma 把产品和运营能力分开：
 
 ```dotenv
 ADMIN_PASSWORD=<随机的管理员登录密码>
+ANALYSIS_REQUIRE_ADMIN=false
 KOMA_CONFIG_SECRET=<另一段稳定的随机字符串>
 ```
 
-`ADMIN_PASSWORD` 为空时后台完全禁用，AI JSON 生成和分析提交保持公开。配置后，登录会建立一个 12 小时 HttpOnly、SameSite=Strict Cookie，同时用于 `/admin` 和三个受保护的分析接口；连续错误登录会按 IP 限流。
+`ADMIN_PASSWORD` 为空时后台完全禁用；配置后，登录会为 `/admin` 建立一个 12 小时 HttpOnly、SameSite=Strict Cookie。分析提交默认保持公开；设置 `ANALYSIS_REQUIRE_ADMIN=true` 后，同一个会话才会保护三个分析接口。连续错误登录会按 IP 限流。
 
 这层权限适合私人单用户部署，但不会校验 URL 的出站目标。若保持公开分析，应另配出站策略或可信 URL 白名单；当前导入器尚未形成完整的 SSRF 边界。
 

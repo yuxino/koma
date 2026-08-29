@@ -20,6 +20,7 @@ import { contentDisposition } from "./artifacts.js";
 import {
   adminAuthEnabled,
   adminSessionCookie,
+  analysisAuthRequired,
   clearAdminSessionCookie,
   createAdminSession,
   isAdminSession,
@@ -51,7 +52,7 @@ app.get("/api/health", async () => {
     analysisProvider: providers.vision.provider,
     models: { asr: providers.asr.model || null, vision: providers.vision.model || null },
     limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds },
-    features: { customExtraction: true, analysisSpecGeneration: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, viewerHistory: true, viewerOwnedDeletion: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled() },
+    features: { customExtraction: true, analysisSpecGeneration: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, viewerHistory: true, viewerOwnedDeletion: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled(), analysisRequiresAdmin: analysisAuthRequired() },
     configured: { asr: asrConfigured, vision: visionConfigured, analysis: visionConfigured },
     database: { driver: databaseDriver() },
     storage: storageHealth(),
@@ -330,7 +331,7 @@ function requireAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
 }
 
 async function requireAnalysisAccess(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  if (!adminAuthEnabled()) return;
+  if (!analysisAuthRequired()) return;
   if (!adminMutationHeader(request)) {
     reply.code(403).send({ error: "管理请求校验失败。" });
     return;

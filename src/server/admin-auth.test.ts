@@ -13,6 +13,21 @@ describe("admin authentication", () => {
     expect(auth.createAdminSession("anything", "127.0.0.1")).toBeNull();
   });
 
+  it("keeps visitor analysis public when only the admin console password is configured", async () => {
+    vi.stubEnv("ADMIN_PASSWORD", "correct horse battery staple");
+    vi.stubEnv("ANALYSIS_REQUIRE_ADMIN", "");
+    const auth = await import("./admin-auth.js");
+    expect(auth.adminAuthEnabled()).toBe(true);
+    expect(auth.analysisAuthRequired()).toBe(false);
+  });
+
+  it("protects analysis only when explicitly enabled alongside the admin console", async () => {
+    vi.stubEnv("ADMIN_PASSWORD", "correct horse battery staple");
+    vi.stubEnv("ANALYSIS_REQUIRE_ADMIN", "true");
+    const auth = await import("./admin-auth.js");
+    expect(auth.analysisAuthRequired()).toBe(true);
+  });
+
   it("creates an HttpOnly same-site session for a valid password", async () => {
     vi.stubEnv("ADMIN_PASSWORD", "correct horse battery staple");
     const auth = await import("./admin-auth.js");

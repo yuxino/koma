@@ -8,6 +8,11 @@ export function adminAuthEnabled(): boolean {
   return Boolean(process.env.ADMIN_PASSWORD);
 }
 
+export function analysisAuthRequired(): boolean {
+  if (!adminAuthEnabled()) return false;
+  return ["1", "true", "on", "yes"].includes(String(process.env.ANALYSIS_REQUIRE_ADMIN || "").trim().toLowerCase());
+}
+
 export function createAdminSession(password: unknown, ip: string, now = Date.now()): string | null {
   if (!adminAuthEnabled()) return null;
   if (!loginAllowed(ip, now)) throw new Error("登录尝试过多，请 15 分钟后再试。");

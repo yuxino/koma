@@ -30,7 +30,8 @@ beforeAll(async () => {
       VISION_PROVIDER: "mock",
       ANALYSIS_PROVIDER: "mock",
       DEMO_REQUESTS_PER_IP_PER_DAY: "0",
-      ADMIN_PASSWORD: "test-admin-password"
+      ADMIN_PASSWORD: "test-admin-password",
+      ANALYSIS_REQUIRE_ADMIN: "true"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });

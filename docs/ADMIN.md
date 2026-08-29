@@ -2,8 +2,8 @@
 
 Koma separates the product from operations:
 
-- With `ADMIN_PASSWORD` empty, visitors submit without an account and receive an unguessable `/jobs/<id>` replay link. The same browser can list and delete jobs it submitted under “My jobs.”
-- With `ADMIN_PASSWORD` configured, the administrator session also protects AI JSON generation plus URL and upload submissions. Read-only replay links remain available to anyone who has the link.
+- Visitors submit without an account and receive an unguessable `/jobs/<id>` replay link. The same browser can list and delete jobs it submitted under “My jobs.”
+- `ADMIN_PASSWORD` protects the operations console without disabling visitor analysis. Set `ANALYSIS_REQUIRE_ADMIN=true` only when AI JSON generation plus URL and upload submissions should be private. Read-only replay links remain available to anyone who has the link.
 - `/admin` is the protected operations console for providers, credentials, jobs, and permanent deletion.
 - Job details show the saved result, extraction instruction, expected JSON shape, requested file formats, and the provider/model snapshot without keys.
 - Koma does not include a public user-account system. Ownership uses a long-lived HttpOnly anonymous cookie and stores only its digest. Other people who receive a replay link can view it but cannot delete the job.
@@ -15,10 +15,11 @@ Set two deployment secrets:
 
 ```dotenv
 ADMIN_PASSWORD=<random administrator password>
+ANALYSIS_REQUIRE_ADMIN=false
 KOMA_CONFIG_SECRET=<a separate stable random secret>
 ```
 
-When `ADMIN_PASSWORD` is empty, administration is disabled while AI JSON generation and analysis submissions remain public. When configured, sign-in creates a 12-hour HttpOnly, SameSite=Strict cookie shared by `/admin` and the three protected analysis endpoints. Repeated failed logins are rate limited by IP.
+When `ADMIN_PASSWORD` is empty, administration is disabled. When configured, sign-in creates a 12-hour HttpOnly, SameSite=Strict cookie for `/admin`. Analysis submissions remain public unless `ANALYSIS_REQUIRE_ADMIN=true`; in that private mode, the same session protects the three analysis endpoints. Repeated failed logins are rate limited by IP.
 
 This access check is suitable for a private, single-user deployment, but it does not validate outbound URL destinations. If analysis remains public, protect URL submission with an egress policy or trusted URL allowlist; the importer is not yet a complete SSRF boundary.
 
