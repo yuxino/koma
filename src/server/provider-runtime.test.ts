@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const cleanup: string[] = [];
 
 afterEach(async () => {
+  await (await import("./database.js")).closeDatabase();
   vi.unstubAllEnvs();
   vi.resetModules();
   await Promise.all(cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })));

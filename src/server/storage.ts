@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type OSS from "ali-oss";
 
 export type StorageDriver = "local" | "oss";
@@ -113,7 +113,10 @@ function localRoot(): string {
 function localObjectPath(key: string): string {
   const root = localRoot();
   const path = resolve(root, normalizeKey(key));
-  if (path !== root && !path.startsWith(`${root}/`)) throw new Error("非法存储路径。");
+  const fromRoot = relative(root, path);
+  if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) {
+    throw new Error("非法存储路径。");
+  }
   return path;
 }
 
