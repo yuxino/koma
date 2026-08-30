@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { posix, win32 } from "node:path";
 import { isBilibiliHost, isDouyinHost } from "./url-source.js";
 
 const douyinPageUserAgent =
@@ -274,59 +275,169 @@ function combineSignals(signal: AbortSignal | undefined, timeoutMs: number): Abo
 }
 
 // yt-dlp 兜底：覆盖抖音/B站之外的其他站点（YouTube、小红书、微博等）。
-export async function resolveWithYtDlp(value: string): Promise<string | null> {
-  const command = findYtDlpCommand();
-  if (!command) return null;
-  const timeoutMs = 90_000;
-  const args = [
-    ...command.args,
-    "--no-playlist",
-    "--no-warnings",
-    "--socket-timeout",
-    "15",
-    "-f",
-    "best[ext=mp4]/best",
-    "-g",
-    value
-  ];
-  const { stdout } = await runYtDlp(command.bin, args, timeoutMs);
-  const lines = String(stdout || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const direct = lines[lines.length - 1];
-  if (direct && /^https?:\/\//i.test(direct)) return direct;
+export async function resolveWithYtDlp(value: string, options: YtDlpResolveOptions = {}): Promise<string | null> {
+  const commands = options.commands ?? findYtDlpCommands();
+  const runImpl = options.runImpl ?? runYtDlp;
+  const timeoutMs = options.timeoutMs ?? 90_000;
+  const deadline = Date.now() + timeoutMs;
+  for (const command of commands) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    const args = [
+      ...command.args,
+      "--no-playlist",
+      "--no-warnings",
+      "--socket-timeout",
+      "15",
+      "-f",
+      "best[ext=mp4]/best",
+      "-g",
+      value
+    ];
+    const { stdout } = await runImpl(command.bin, args, remainingMs);
+    const lines = String(stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const direct = lines[lines.length - 1];
+    if (direct && /^https?:\/\//i.test(direct)) return direct;
+  }
   return null;
 }
 
-interface YtDlpCommand {
+export interface YtDlpCommand {
   bin: string;
   args: string[];
 }
 
-function findYtDlpCommand(): YtDlpCommand | null {
-  if (process.env.YTDLP_PATH) return { bin: process.env.YTDLP_PATH, args: [] };
-  const ytdlp = findOnPath("yt-dlp");
-  if (ytdlp) return { bin: ytdlp, args: [] };
-  const python3 = findOnPath("python3");
-  if (python3) return { bin: python3, args: ["-m", "yt_dlp"] };
-  return null;
+interface CommandLookupResult {
+  status: number | null;
+  stdout?: string | Buffer | null;
 }
 
-function findOnPath(name: string): string | null {
+type CommandLookupSpawn = (
+  command: string,
+  args: string[],
+  options: {
+    encoding: "utf8";
+    env: NodeJS.ProcessEnv;
+    shell: false;
+    windowsHide: true;
+  }
+) => CommandLookupResult;
+
+export interface CommandLookupOptions {
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+  spawnSyncImpl?: CommandLookupSpawn;
+}
+
+export interface YtDlpCommandLookupOptions extends CommandLookupOptions {
+  findOnPathImpl?: (name: string) => string | null;
+}
+
+export interface YtDlpResolveOptions {
+  commands?: readonly YtDlpCommand[];
+  runImpl?: (bin: string, args: string[], timeoutMs: number) => Promise<{ stdout: string; stderr: string }>;
+  timeoutMs?: number;
+}
+
+const defaultWindowsPathExt = [".COM", ".EXE", ".BAT", ".CMD"];
+const safeCommandName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export function findYtDlpCommands(options: YtDlpCommandLookupOptions = {}): YtDlpCommand[] {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const findImpl = options.findOnPathImpl ?? ((name: string) => findOnPath(name, {
+    platform,
+    env,
+    spawnSyncImpl: options.spawnSyncImpl
+  }));
+  const commands: YtDlpCommand[] = [];
+  const configured = env.YTDLP_PATH?.trim();
+  if (configured && !configured.includes("\0")) commands.push({ bin: configured, args: [] });
+
+  const binaryNames = platform === "win32" ? ["yt-dlp.exe", "yt-dlp"] : ["yt-dlp"];
+  for (const name of binaryNames) {
+    const found = findImpl(name);
+    if (found) commands.push({ bin: found, args: [] });
+  }
+
+  const pythonNames = platform === "win32" ? ["python3", "python", "py"] : ["python3", "python"];
+  for (const name of pythonNames) {
+    const found = findImpl(name);
+    if (!found) continue;
+    commands.push({
+      bin: found,
+      args: name === "py" ? ["-3", "-m", "yt_dlp"] : ["-m", "yt_dlp"]
+    });
+  }
+
+  const seen = new Set<string>();
+  return commands.filter((command) => {
+    const bin = platform === "win32" ? command.bin.toLowerCase() : command.bin;
+    const key = `${bin}\0${command.args.join("\0")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function findOnPath(name: string, options: CommandLookupOptions = {}): string | null {
+  if (!safeCommandName.test(name)) return null;
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const locator = platform === "win32" ? "where.exe" : "which";
+  const spawnOptions = {
+    encoding: "utf8" as const,
+    env,
+    shell: false as const,
+    windowsHide: true as const
+  };
   try {
-    const result = spawnSync("which", [name], { encoding: "utf8" });
+    const result = options.spawnSyncImpl
+      ? options.spawnSyncImpl(locator, [name], spawnOptions)
+      : spawnSync(locator, [name], spawnOptions);
     if (result.status !== 0) return null;
-    const first = result.stdout.trim().split("\n")[0];
-    return first || null;
+    const pathApi = platform === "win32" ? win32 : posix;
+    const expectedNames = commandBasenames(name, platform, env);
+    const found = String(result.stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim().replace(/^"(.*)"$/, "$1"))
+      .find((line) => {
+        if (!pathApi.isAbsolute(line)) return false;
+        const basename = pathApi.basename(line);
+        const normalized = platform === "win32" ? basename.toLowerCase() : basename;
+        return expectedNames.has(normalized);
+      });
+    return found || null;
   } catch {
     return null;
   }
 }
 
+function commandBasenames(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Set<string> {
+  if (platform !== "win32") return new Set([name]);
+  const normalizedName = name.toLowerCase();
+  const result = new Set([normalizedName]);
+  if (win32.extname(name)) return result;
+  for (const extension of windowsPathExtensions(env)) {
+    result.add(`${normalizedName}${extension.toLowerCase()}`);
+  }
+  return result;
+}
+
+function windowsPathExtensions(env: NodeJS.ProcessEnv): string[] {
+  const configured = Object.entries(env).find(([key]) => key.toUpperCase() === "PATHEXT")?.[1];
+  const extensions = (configured ? configured.split(";") : defaultWindowsPathExt)
+    .map((extension) => extension.trim())
+    .filter((extension) => /^\.[A-Za-z0-9]+$/.test(extension));
+  return extensions.length > 0 ? [...new Set(extensions.map((extension) => extension.toUpperCase()))] : defaultWindowsPathExt;
+}
+
 function runYtDlp(bin: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"], shell: false, windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });

@@ -5,11 +5,14 @@ import {
   douyinShareUrl,
   extractUrlFromText,
   fetchTtwidCookie,
+  findOnPath,
+  findYtDlpCommands,
   looksLikeBilibiliLink,
   looksLikeDouyinLink,
   parseDouyinPage,
   resolveBilibiliVideo,
-  resolveDouyinVideo
+  resolveDouyinVideo,
+  resolveWithYtDlp
 } from "./resolver.js";
 
 describe("extractUrlFromText", () => {
@@ -323,5 +326,87 @@ describe("fetchTtwidCookie", () => {
     await expect(resolveDouyinVideo("https://v.douyin.com/x/", { fetchImpl, cookie: "ttwid=custom" }))
       .rejects.toThrow(/图文笔记|已删除|登录/);
     expect(seenCookies.every((cookie) => cookie === "ttwid=custom")).toBe(true);
+  });
+});
+
+describe("yt-dlp command discovery", () => {
+  it("uses where.exe and PATHEXT on Windows", () => {
+    const spawnSyncImpl = vi.fn(() => ({
+      status: 0,
+      stdout: "C:\\Tools\\yt-dlp.EXE\r\n"
+    }));
+
+    expect(findOnPath("yt-dlp", {
+      platform: "win32",
+      env: { PATH: "C:\\Tools", PATHEXT: ".COM;.EXE;.CMD" },
+      spawnSyncImpl
+    })).toBe("C:\\Tools\\yt-dlp.EXE");
+    expect(spawnSyncImpl).toHaveBeenCalledWith(
+      "where.exe",
+      ["yt-dlp"],
+      expect.objectContaining({ shell: false, windowsHide: true })
+    );
+  });
+
+  it("uses which on non-Windows platforms", () => {
+    const spawnSyncImpl = vi.fn(() => ({ status: 0, stdout: "/opt/bin/yt-dlp\n" }));
+
+    expect(findOnPath("yt-dlp", { platform: "linux", env: {}, spawnSyncImpl })).toBe("/opt/bin/yt-dlp");
+    expect(spawnSyncImpl).toHaveBeenCalledWith(
+      "which",
+      ["yt-dlp"],
+      expect.objectContaining({ shell: false })
+    );
+  });
+
+  it("rejects unsafe names, relative output and mismatched executables", () => {
+    const spawnSyncImpl = vi.fn(() => ({
+      status: 0,
+      stdout: "relative\\yt-dlp.exe\r\nC:\\Tools\\yt-dlp.txt\r\n"
+    }));
+
+    expect(findOnPath("yt-dlp & calc", { platform: "win32", env: {}, spawnSyncImpl })).toBeNull();
+    expect(spawnSyncImpl).not.toHaveBeenCalled();
+    expect(findOnPath("yt-dlp", { platform: "win32", env: { PATHEXT: ".EXE;.CMD" }, spawnSyncImpl })).toBeNull();
+  });
+
+  it("returns Windows native and Python fallbacks in deterministic order", () => {
+    const locations: Record<string, string> = {
+      "yt-dlp.exe": "C:\\Tools\\yt-dlp.exe",
+      "yt-dlp": "C:\\Tools\\yt-dlp.exe",
+      python3: "C:\\Python313\\python3.exe",
+      python: "C:\\Python313\\python.exe",
+      py: "C:\\Windows\\py.exe"
+    };
+    const findOnPathImpl = vi.fn((name: string) => locations[name] || null);
+
+    expect(findYtDlpCommands({
+      platform: "win32",
+      env: { YTDLP_PATH: "C:\\Portable\\yt-dlp.exe" },
+      findOnPathImpl
+    })).toEqual([
+      { bin: "C:\\Portable\\yt-dlp.exe", args: [] },
+      { bin: "C:\\Tools\\yt-dlp.exe", args: [] },
+      { bin: "C:\\Python313\\python3.exe", args: ["-m", "yt_dlp"] },
+      { bin: "C:\\Python313\\python.exe", args: ["-m", "yt_dlp"] },
+      { bin: "C:\\Windows\\py.exe", args: ["-3", "-m", "yt_dlp"] }
+    ]);
+  });
+
+  it("tries the next candidate when a PATH match cannot run yt-dlp", async () => {
+    const commands = [
+      { bin: "C:\\WindowsApps\\python3.exe", args: ["-m", "yt_dlp"] },
+      { bin: "C:\\Python313\\python.exe", args: ["-m", "yt_dlp"] }
+    ];
+    const runImpl = vi.fn(async (bin: string) => ({
+      stdout: bin.includes("WindowsApps") ? "" : "https://cdn.example/video.mp4\r\n",
+      stderr: ""
+    }));
+    const sourceUrl = "https://example.test/watch?v=1&next=calc.exe";
+
+    await expect(resolveWithYtDlp(sourceUrl, { commands, runImpl, timeoutMs: 500 })).resolves
+      .toBe("https://cdn.example/video.mp4");
+    expect(runImpl).toHaveBeenCalledTimes(2);
+    expect(runImpl.mock.calls[1][1].at(-1)).toBe(sourceUrl);
   });
 });
