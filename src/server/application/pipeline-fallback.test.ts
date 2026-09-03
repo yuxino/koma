@@ -12,8 +12,8 @@ vi.stubEnv("PUBLIC_BASE_URL", "https://example.com");
 vi.stubEnv("ANALYSIS_PROVIDER", "mock");
 
 // transcribeFullAudio 抛错（模拟公网地址不可达等），transcribe 正常返回
-vi.mock("./asr.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./asr.js")>();
+vi.mock("../media/asr.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../media/asr.js")>();
   return {
     ...actual,
     transcribeFullAudio: vi.fn().mockRejectedValue(new Error("听写任务失败：音频无法下载")),
@@ -59,7 +59,7 @@ describe("speaker diarization fallback", () => {
   it("falls back to segment transcription when diarization fails, instead of failing the whole analysis", async () => {
     const dir = await mkdtemp(join(os.tmpdir(), "koma-fallback-run-"));
     tempDirs.push(dir);
-    const { transcribe, transcribeFullAudio } = await import("./asr.js");
+    const { transcribe, transcribeFullAudio } = await import("../media/asr.js");
 
     const result = await analyzeMedia({
       inputPath: videoPath,

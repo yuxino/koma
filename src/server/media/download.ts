@@ -2,7 +2,7 @@ import { createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { config } from "./config.js";
+import { config } from "../config/config.js";
 import { headersForVideoUrl } from "./url-source.js";
 import { inspectVideo, probeRemoteVideoDuration } from "./video.js";
 

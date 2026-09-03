@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const cleanup: string[] = [];
 
 afterEach(async () => {
-  await (await import("./database.js")).closeDatabase();
+  await (await import("../persistence/database.js")).closeDatabase();
   vi.unstubAllEnvs();
   vi.resetModules();
   await Promise.all(cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })));
@@ -52,12 +52,12 @@ describe("runtime provider settings", () => {
     const bytes = await readFile(join(root, "koma.sqlite"));
     expect(bytes.toString("utf8")).not.toContain("groq-secret-1234");
 
-    const database = await import("./database.js");
+    const database = await import("../persistence/database.js");
     await database.closeDatabase();
     vi.resetModules();
     const reloaded = await import("./provider-runtime.js");
     await reloaded.initializeProviderSettings();
     expect(reloaded.getRuntimeProviders().vision).toMatchObject({ provider: "openrouter", apiKey: "openrouter-secret-5678" });
-    await (await import("./database.js")).closeDatabase();
+    await (await import("../persistence/database.js")).closeDatabase();
   });
 });

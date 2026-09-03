@@ -9,7 +9,7 @@ import {
 } from "./analysis-spec-ai.js";
 import type { ChatCompletionRequest } from "./chat-completion.js";
 import type { RuntimeProvider } from "./provider-runtime.js";
-import type { VisionProvider } from "./config.js";
+import type { VisionProvider } from "../config/config.js";
 
 const provider: RuntimeProvider<VisionProvider> = {
   provider: "openai",

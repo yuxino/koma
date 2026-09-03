@@ -1,17 +1,17 @@
 import { mkdir, rm } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { config } from "./config.js";
-import { analyze } from "./analysis.js";
-import { transcribe, transcribeFullAudio } from "./asr.js";
-import { downloadUrl } from "./download.js";
+import { config } from "../config/config.js";
+import { analyze } from "../analysis/analysis.js";
+import { transcribe, transcribeFullAudio } from "../media/asr.js";
+import { downloadUrl } from "../media/download.js";
 import { flushJob, getJobAbortSignal, releaseWorkingDirectory, updateJob, type AnalysisResult, type Job, type JobProgress } from "./jobs.js";
-import { resolveVideoUrl } from "./resolver.js";
-import { createSemaphore } from "./semaphore.js";
-import { extractAudioSegments, extractFrames, inspectVideo } from "./video.js";
-import type { AnalysisSpec } from "./analysis-spec.js";
-import { getRuntimeProviders, type RuntimeProvider, type RuntimeProviders } from "./provider-runtime.js";
-import type { AsrProvider } from "./config.js";
-import { putStoredFile, putStoredText } from "./storage.js";
+import { resolveVideoUrl } from "../media/resolver.js";
+import { createSemaphore } from "../shared/semaphore.js";
+import { extractAudioSegments, extractFrames, inspectVideo } from "../media/video.js";
+import type { AnalysisSpec } from "../analysis/analysis-spec.js";
+import { getRuntimeProviders, type RuntimeProvider, type RuntimeProviders } from "../analysis/provider-runtime.js";
+import type { AsrProvider } from "../config/config.js";
+import { putStoredFile, putStoredText } from "../persistence/storage.js";
 
 // 限制同时运行的分析任务数，超出部分排队等待。
 // 多个大视频同时抽帧/转写会吃满 CPU 和内存，这里把它们串成有限并发。

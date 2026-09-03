@@ -6,8 +6,8 @@ import {
   type AsrProvider,
   type ProviderPreset,
   type VisionProvider
-} from "./config.js";
-import { readSetting, writeSetting } from "./database.js";
+} from "../config/config.js";
+import { readSetting, writeSetting } from "../persistence/database.js";
 
 export interface RuntimeProvider<TProvider extends string> {
   provider: TProvider;

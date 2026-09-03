@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { config } from "./config.js";
+import { config } from "../config/config.js";
 import { registerTempAudio, removeTempAudio } from "./temp-audio.js";
 import { extractFullAudio } from "./video.js";
-import type { AudioSegment, TranscriptLine } from "./types.js";
-import { getRuntimeProviders, type RuntimeProvider } from "./provider-runtime.js";
-import type { AsrProvider } from "./config.js";
+import type { AudioSegment, TranscriptLine } from "../shared/types.js";
+import { getRuntimeProviders, type RuntimeProvider } from "../analysis/provider-runtime.js";
+import type { AsrProvider } from "../config/config.js";
 
 // 字幕级听写走同步 Fun-ASR-Flash（base64 直传，无需公网地址），
 // 返回词级时间戳后按标点/停顿聚合为字幕行。

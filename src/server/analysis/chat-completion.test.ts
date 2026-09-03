@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { config } from "./config.js";
+import { config } from "../config/config.js";
 import { ChatCompletionUpstreamError, requestChatCompletion } from "./chat-completion.js";
 import type { RuntimeProvider } from "./provider-runtime.js";
-import type { VisionProvider } from "./config.js";
+import type { VisionProvider } from "../config/config.js";
 
 const openRouterProvider: RuntimeProvider<VisionProvider> = {
   provider: "openrouter",

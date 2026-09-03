@@ -1,13 +1,13 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { config, type AsrProvider, type VisionProvider } from "./config.js";
-import type { TranscriptLine } from "./types.js";
-import type { AnalysisSpec } from "./analysis-spec.js";
-import type { Artifact } from "./artifacts.js";
-import { deleteJobRecord, readJobOwner, readJobRecord, writeJobOwner, writeJobRecord, type PersistedJobRecord } from "./database.js";
-import { getRuntimeProviders, type RuntimeProviders } from "./provider-runtime.js";
-import { deleteStoredPrefix, jobStoragePrefix } from "./storage.js";
+import { config, type AsrProvider, type VisionProvider } from "../config/config.js";
+import type { TranscriptLine } from "../shared/types.js";
+import type { AnalysisSpec } from "../analysis/analysis-spec.js";
+import type { Artifact } from "../persistence/artifacts.js";
+import { deleteJobRecord, readJobOwner, readJobRecord, writeJobOwner, writeJobRecord, type PersistedJobRecord } from "../persistence/database.js";
+import { getRuntimeProviders, type RuntimeProviders } from "../analysis/provider-runtime.js";
+import { deleteStoredPrefix, jobStoragePrefix } from "../persistence/storage.js";
 export type { TranscriptLine };
 
 export interface Frame {

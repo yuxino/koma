@@ -4,7 +4,7 @@ import {
   type ChatCompletionContent,
   type ChatCompletionRequest
 } from "./chat-completion.js";
-import { config, type VisionProvider } from "./config.js";
+import { config, type VisionProvider } from "../config/config.js";
 import { getRuntimeProviders, type RuntimeProvider } from "./provider-runtime.js";
 
 export type AnalysisSpecAiErrorKind = "request" | "unavailable" | "upstream" | "invalid-output";

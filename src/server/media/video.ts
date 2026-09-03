@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import ffmpegStatic from "ffmpeg-static";
-import { config } from "./config.js";
+import { config } from "../config/config.js";
 
 const require = createRequire(import.meta.url);
 const ffprobeStatic = require("@ffprobe-installer/ffprobe") as { path: string };
