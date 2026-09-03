@@ -1,7 +1,7 @@
 import {
   MAX_ANALYSIS_INSTRUCTION_CHARS,
   MAX_OUTPUT_SCHEMA_CHARS
-} from "../server/analysis-spec.js";
+} from "../../../server/analysis/analysis-spec.js";
 
 export { MAX_ANALYSIS_INSTRUCTION_CHARS, MAX_OUTPUT_SCHEMA_CHARS };
 

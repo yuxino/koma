@@ -5,18 +5,18 @@ import { isIP } from "node:net";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { config } from "./config.js";
-import { createJob, deleteJob, loadJob, serializeJob, updateJob, type Job } from "./jobs.js";
-import { getTempAudio } from "./temp-audio.js";
-import { enqueueAnalysis } from "./pipeline.js";
-import { streamToFile } from "./download.js";
-import { extractUrlFromText } from "./resolver.js";
-import { normalizeVideoUrl } from "./url-source.js";
-import { parseByteRange } from "./video-stream.js";
-import { createDailyLimiter } from "./rate-limit.js";
-import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis-spec.js";
-import { generateAnalysisSpec, validateAnalysisSpecGenerationLanguage, validateAnalysisSpecGenerationRequest } from "./analysis-spec-ai.js";
-import { contentDisposition } from "./artifacts.js";
+import { config } from "./config/config.js";
+import { createJob, deleteJob, loadJob, serializeJob, updateJob, type Job } from "./application/jobs.js";
+import { getTempAudio } from "./media/temp-audio.js";
+import { enqueueAnalysis } from "./application/pipeline.js";
+import { streamToFile } from "./media/download.js";
+import { extractUrlFromText } from "./media/resolver.js";
+import { normalizeVideoUrl } from "./media/url-source.js";
+import { parseByteRange } from "./media/video-stream.js";
+import { createDailyLimiter } from "./http/rate-limit.js";
+import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis/analysis-spec.js";
+import { generateAnalysisSpec, validateAnalysisSpecGenerationLanguage, validateAnalysisSpecGenerationRequest } from "./analysis/analysis-spec-ai.js";
+import { contentDisposition } from "./persistence/artifacts.js";
 import {
   adminAuthEnabled,
   adminSessionCookie,
@@ -25,11 +25,11 @@ import {
   createAdminSession,
   isAdminSession,
   revokeAdminSession
-} from "./admin-auth.js";
-import { databaseDriver, initializeDatabase, listJobHistory, listOwnedJobHistory, markInterruptedJobs, type JobHistoryRecord } from "./database.js";
-import { getRuntimeProviders, getSafeProviderSettings, initializeProviderSettings, resetProviderSettings, updateProviderSettings } from "./provider-runtime.js";
-import { initializeStorage, storageHealth, storedObjectInfo } from "./storage.js";
-import { readViewerOwnerId, resolveViewerIdentity, viewerSessionCookie } from "./viewer-session.js";
+} from "./auth/admin-auth.js";
+import { databaseDriver, initializeDatabase, listJobHistory, listOwnedJobHistory, markInterruptedJobs, type JobHistoryRecord } from "./persistence/database.js";
+import { getRuntimeProviders, getSafeProviderSettings, initializeProviderSettings, resetProviderSettings, updateProviderSettings } from "./analysis/provider-runtime.js";
+import { initializeStorage, storageHealth, storedObjectInfo } from "./persistence/storage.js";
+import { readViewerOwnerId, resolveViewerIdentity, viewerSessionCookie } from "./auth/viewer-session.js";
 
 await initializeDatabase();
 await markInterruptedJobs();

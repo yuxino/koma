@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config } from "../config/config.js";
 import type { RuntimeProvider } from "./provider-runtime.js";
 
 export type ChatCompletionUserContent = string | readonly Record<string, unknown>[];

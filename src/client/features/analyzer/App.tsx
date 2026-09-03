@@ -12,12 +12,12 @@ import {
   type AnalysisFieldDescription,
   type AnalysisSuggestionId
 } from "./analysis-config.js";
-import { parseAnalysisSpec } from "../server/analysis-spec.js";
-import { translateServerError } from "./errors.js";
-import { formatTime } from "./format.js";
+import { parseAnalysisSpec } from "../../../server/analysis/analysis-spec.js";
+import { translateServerError } from "../../shared/errors.js";
+import { formatTime } from "../../shared/format.js";
 import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
-import { progressStepStates } from "./progress.js";
-import "./atelier-public.css";
+import { progressStepStates } from "../../shared/progress.js";
+import "../../styles/atelier-public.css";
 
 type Language = "en" | "zh";
 const analysisAccessHeaders = { "x-koma-admin": "1" };

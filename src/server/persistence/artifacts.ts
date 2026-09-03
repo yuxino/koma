@@ -1,4 +1,4 @@
-import { ARTIFACT_FORMATS, type ArtifactFormat } from "./analysis-spec.js";
+import { ARTIFACT_FORMATS, type ArtifactFormat } from "../analysis/analysis-spec.js";
 
 export const MAX_ARTIFACTS = 8;
 export const MAX_ARTIFACT_CHARS = 200_000;

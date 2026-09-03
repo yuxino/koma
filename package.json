@@ -18,7 +18,8 @@
     "typecheck": "npm run typecheck:server && npm run typecheck:client",
     "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
     "typecheck:client": "tsc -p tsconfig.client.json --noEmit",
-    "check": "npm test && npm run typecheck:client && npm run build"
+    "check": "npm run check:structure && npm test && npm run typecheck:client && npm run build",
+    "check:structure": "node scripts/check-source-layout.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^9.2.1",

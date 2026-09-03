@@ -5,11 +5,11 @@
 // Progress is written to stderr. Analysis output is written to stdout or --json.
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { config } from "./config.js";
-import { downloadUrl } from "./download.js";
-import { analyzeMedia } from "./pipeline.js";
-import { resolveVideoUrl } from "./resolver.js";
-import { parseAnalysisSpec, type ArtifactFormat } from "./analysis-spec.js";
+import { config } from "./config/config.js";
+import { downloadUrl } from "./media/download.js";
+import { analyzeMedia } from "./application/pipeline.js";
+import { resolveVideoUrl } from "./media/resolver.js";
+import { parseAnalysisSpec, type ArtifactFormat } from "./analysis/analysis-spec.js";
 
 const HELP = `Koma CLI
 

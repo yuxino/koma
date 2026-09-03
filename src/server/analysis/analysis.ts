@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { config } from "./config.js";
-import type { AnalysisResult, Chapter, Frame, Tag, TranscriptLine } from "./jobs.js";
+import { config } from "../config/config.js";
+import type { AnalysisResult, Chapter, Frame, Tag, TranscriptLine } from "../application/jobs.js";
 import { assertMatchesOutputShape, hasCustomAnalysis, hasExtractionRequest, type AnalysisSpec } from "./analysis-spec.js";
-import { missingArtifactFormats, normalizeArtifacts } from "./artifacts.js";
+import { missingArtifactFormats, normalizeArtifacts } from "../persistence/artifacts.js";
 import { getRuntimeProviders, type RuntimeProvider } from "./provider-runtime.js";
-import type { VisionProvider } from "./config.js";
+import type { VisionProvider } from "../config/config.js";
 import { requestChatCompletion } from "./chat-completion.js";
 
 export type AnalysisLanguage = "en" | "zh";

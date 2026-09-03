@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import "./atelier-admin.css";
+import "../../styles/atelier-admin.css";
 
 type Language = "en" | "zh";
 type StageName = "asr" | "vision";
