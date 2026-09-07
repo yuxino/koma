@@ -14,9 +14,12 @@ describe("private complete sources for manual retry", () => {
     await retainRetrySource(job);
     expect(await retainedInputPath({ dir: job.dir, status: "failed" })).toBe(job.inputPath);
     expect(await readFile(job.inputPath, "utf8")).toBe("complete video");
-    expect((await stat(job.inputPath)).mode & 0o777).toBe(0o600);
-    expect((await stat(job.dir)).mode & 0o777).toBe(0o700);
-    expect((await stat(join(job.dir, "retry-source.json"))).mode & 0o777).toBe(0o600);
+    // Windows chmod does not expose POSIX owner/group permission bits.
+    if (process.platform !== "win32") {
+      expect((await stat(job.inputPath)).mode & 0o777).toBe(0o600);
+      expect((await stat(job.dir)).mode & 0o777).toBe(0o700);
+      expect((await stat(join(job.dir, "retry-source.json"))).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("does not advertise unmarked, incomplete, deleted, or active inputs for retry", async () => {

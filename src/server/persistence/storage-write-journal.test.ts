@@ -19,7 +19,8 @@ async function fixture(phase: PendingStorageWrite["phase"] = "committing") {
 describe("uncertain remote write cleanup", () => {
   it("keeps an ambiguous Complete on disk until its actual object can be confirmed", async () => {
     const { path, state, methods, client } = await fixture();
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    // Windows chmod does not expose POSIX owner/group permission bits.
+    if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
     await expect(settleStorageWrite(client, path, "jobs/test/")).rejects.toBeInstanceOf(StorageCleanupError);
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual(state);
     methods.head.mockResolvedValue({ res: { headers: { "x-oss-meta-koma-upload-id": state.marker, "content-length": "1024" } } });
