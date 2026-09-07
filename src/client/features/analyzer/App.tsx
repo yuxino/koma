@@ -26,6 +26,8 @@ import { useGithubSession } from "./github-session.js";
 import { downloadText, resultToMarkdown, transcriptMatches, transcriptToSrt } from "./workspace-utils.js";
 import "../../styles/atelier-public.css";
 import "../../styles/atelier-workspace.css";
+import "../../styles/companion-shell.css";
+import "../../styles/companion-results.css";
 
 type Language = "en" | "zh";
 const analysisAccessHeaders = { "X-Koma-Client": "1" };
@@ -513,8 +515,8 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
 
 function Brand({ onClick, label }: { onClick?: () => void; label?: string }) {
   return onClick
-    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><img src="/koma-note-girl.png" alt="" className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>FRAME ATELIER</span></span></button>
-    : <div className="brand-lockup"><img src="/koma-note-girl.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>FRAME ATELIER</span></div></div>;
+    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><img src="/koma-companion-girl.png" alt="" className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>VIDEO COMPANION</span></span></button>
+    : <div className="brand-lockup"><img src="/koma-companion-girl.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>VIDEO COMPANION</span></div></div>;
 }
 
 function App() {
@@ -1088,7 +1090,7 @@ function App() {
     setInstruction(requests[kind]); setSuggestionIds([]); setSchemaActionError(""); setConfigNotice("");
   }
 
-  return <div className="app-shell">
+  return <div className="app-shell companion-ui">
     <header className="site-header"><div className="header-inner"><Brand onClick={job || showHistory ? goHome : undefined} label={t.backHome} />
       {authenticated && <nav className="workspace-nav" aria-label={language === "zh" ? "工作区导航" : "Workspace navigation"}><button type="button" className={!job && !showHistory ? "selected" : ""} aria-current={!job && !showHistory ? "page" : undefined} onClick={goHome}>{language === "zh" ? "新分析" : "New analysis"}</button><button type="button" className={showHistory ? "selected" : ""} aria-current={showHistory ? "page" : undefined} onClick={enterLibrary}>{language === "zh" ? "资料库" : "Library"}{Boolean(auth.session?.legacyJobCount) && <i aria-label={language === "zh" ? "有旧任务可找回" : "Older jobs available"} />}</button></nav>}
       <div className="header-actions"><button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
@@ -1098,14 +1100,17 @@ function App() {
 
     <main className="main-shell">
       {accountError && <p className="account-error" role="alert">{accountError}</p>}
-      {auth.loading && !job && <div className="session-loading" role="status"><img src="/koma-note-girl.png" alt="" /><span>{language === "zh" ? "正在打开工作区…" : "Opening your workspace…"}</span></div>}
+      {auth.loading && !job && <div className="session-loading" role="status"><img src="/koma-companion-girl.png" alt="" /><span>{language === "zh" ? "正在打开工作区…" : "Opening your workspace…"}</span></div>}
       {!auth.loading && !authenticated && !job && <WelcomeScreen language={language} enabled={Boolean(auth.session?.enabled)} unavailable={auth.unavailable} expired={auth.expired} error={error} onRefresh={auth.refresh} />}
       {authenticated && !job && showHistory && <WorkspaceLibrary key={accountId} language={language} onOpen={openHistoryJob} onDelete={deleteOwnedJob} onNew={goHome} onUnauthorized={auth.expire} legacyJobCount={auth.session?.legacyJobCount || 0} onClaimed={auth.refresh} />}
       {authenticated && !job && !showHistory && <section className="landing-layout workspace-compose">
-        <aside className="compose-aside"><span className="page-label">A NEW FRAME OF MIND</span><h1>{language === "zh" ? <>今天，<br />想看懂什么？</> : <>What’s worth<br />{" "}a closer look?</>}</h1><p>{language === "zh" ? "放进一段视频，带走一份能继续使用的笔记。" : "Bring a video. Leave with notes you can put to work."}</p><div className="compose-character"><img src="/koma-note-girl.png" alt="" /><span>{language === "zh" ? "逐帧整理员，随时就位。" : "Your frame assistant is ready."}</span></div><div className="compose-guide"><div><span>01</span><p>{language === "zh" ? "上传视频，或粘贴公开链接。" : "Upload a video or paste a public link."}</p></div><div><span>02</span><p>{language === "zh" ? "写下你关心的内容，或直接开始。" : "Tell Koma what matters, or simply start."}</p></div><div><span>03</span><p>{language === "zh" ? "在资料库回看、检索和下载。" : "Return, search, and download from your library."}</p></div></div><button type="button" className="compose-library-link" onClick={enterLibrary}><span>{language === "zh" ? "打开我的资料库" : "Open my video library"}</span><span aria-hidden="true"><Icon name="arrow-up-right" size={18} /></span></button></aside>
+        <aside className="compose-aside">
+          <div className="compose-intro"><span className="page-label">{language === "zh" ? "你的视频小助手" : "YOUR VIDEO COMPANION"}</span><h1>{language === "zh" ? <>把视频放进来，<br />一起记下重点。</> : <>Bring a video.<br />I’ll keep the good bits.</>}</h1><p>{language === "zh" ? "找到重点、回看原句，再把笔记带走。今天想看哪一段？" : "Find the ideas, return to the words, and leave with useful notes."}</p><button type="button" className="compose-library-link" onClick={enterLibrary}><Icon name="arrow-up-right" size={17} /><span>{language === "zh" ? "去我的资料库看看" : "Open my video library"}</span></button></div>
+          <div className="compose-character"><span>{language === "zh" ? "准备好啦，一起开始吧。" : "Ready when you are."}</span><img src="/koma-companion-girl.png" alt="" fetchPriority="high" /></div>
+        </aside>
 
         <form className="capture-card" onSubmit={startAnalysis} aria-busy={busy || generatingSchema} aria-label={t.startOne}>
-          <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><img src="/koma-note-girl.png" alt="" /></header>
+          <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><div className="capture-journey" aria-hidden="true"><span>{language === "zh" ? "放入视频" : "Add video"}</span><Icon name="arrow-up-right" size={14} /><span>{language === "zh" ? "告诉我要求" : "Make it yours"}</span><Icon name="arrow-up-right" size={14} /><span>{language === "zh" ? "收好笔记" : "Keep the notes"}</span></div></header>
           <div className="workbench-source">
             <h3 id="video-source-heading" className="workbench-section-label"><span className="step-number">01</span>{t.sourceLabel}</h3>
             <div className="mode-switch" role="group" aria-label={t.sourceLabel}>
@@ -1176,7 +1181,7 @@ function ProgressView({ job, progress, error, onClear, onRetry, retrying, langua
   const steps = progressStepStates(job.progress?.stage || "queued", job.status, safeProgress);
   const failureText = error || job.error || (failed ? job.progress?.detail : "");
   return <section className="progress-layout"><div className="progress-copy"><span className="page-label">{job.source === "url" ? t.analyzingRemote : t.analyzingLocal}</span><h1>{failed ? (language === "zh" ? "这次没能完成。" : "This one needs another try.") : t.progressTitle}</h1><p>{failed ? (job.retryable ? (language === "zh" ? "来源和分析要求已经保留，可以直接重试。" : "Your source and analysis request are saved. You can retry here.") : (language === "zh" ? "视频来源已不可用，请重新导入视频。" : "The video source is no longer available. Please import it again.")) : t.progressText}</p><strong className="progress-job-title">{job.title}</strong></div>
-    <div className={`progress-card ${failed ? "failed" : ""}`}><div className="progress-mascot"><img src="/koma-note-girl.png" alt="" /></div><div className="progress-status"><span aria-live="polite" aria-atomic="true">{stageLabel}</span><strong aria-hidden={failed}>{failed ? <Icon name="alert" size={44} /> : `${safeProgress}%`}</strong></div>{!failed && <div className="progress-track" role="progressbar" aria-label={stageLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeProgress}><span style={{ width: `${safeProgress}%` }} /></div>}{!failed && <p>{translateProgressDetail(job.progress?.detail, language) || t.preparing}</p>}{failureText && <div className="inline-error" role="alert">{translateServerError(failureText, language, { preserveUnknown: failed })}</div>}<div className="process-list"><span className={steps[0]} aria-current={steps[0] === "current" ? "step" : undefined}>{t.entered}</span><span className={steps[1]} aria-current={steps[1] === "current" ? "step" : undefined}>{t.mediaAnalysis}</span><span className={steps[2]} aria-current={steps[2] === "current" ? "step" : undefined}>{t.readableResult}</span></div>{failed ? <div className="retry-row">{job.owned && job.retryable && <button className="primary-button" type="button" disabled={retrying} onClick={onRetry}>{retrying ? t.starting : t.retry}<Glyph name="arrow" size={17} /></button>}<button className="text-button" type="button" onClick={onClear}>{language === "zh" ? "重新导入视频" : "Import another video"}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
+    <div className={`progress-card ${failed ? "failed" : ""}`}><div className="progress-mascot"><img src="/koma-companion-girl.png" alt="" /></div><div className="progress-status"><span aria-live="polite" aria-atomic="true">{stageLabel}</span><strong aria-hidden={failed}>{failed ? <Icon name="alert" size={44} /> : `${safeProgress}%`}</strong></div>{!failed && <div className="progress-track" role="progressbar" aria-label={stageLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeProgress}><span style={{ width: `${safeProgress}%` }} /></div>}{!failed && <p>{translateProgressDetail(job.progress?.detail, language) || t.preparing}</p>}{failureText && <div className="inline-error" role="alert">{translateServerError(failureText, language, { preserveUnknown: failed })}</div>}<div className="process-list"><span className={steps[0]} aria-current={steps[0] === "current" ? "step" : undefined}>{t.entered}</span><span className={steps[1]} aria-current={steps[1] === "current" ? "step" : undefined}>{t.mediaAnalysis}</span><span className={steps[2]} aria-current={steps[2] === "current" ? "step" : undefined}>{t.readableResult}</span></div>{failed ? <div className="retry-row">{job.owned && job.retryable && <button className="primary-button" type="button" disabled={retrying} onClick={onRetry}>{retrying ? t.starting : t.retry}<Glyph name="arrow" size={17} /></button>}<button className="text-button" type="button" onClick={onClear}>{language === "zh" ? "重新导入视频" : "Import another video"}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
   </section>;
 }
 
@@ -1517,7 +1522,7 @@ function InfoModal({ onClose, language }: { onClose: () => void; language: Langu
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}><Icon name="close" size={20} /></button><div className="info-modal-head"><img src="/koma-note-girl.png" alt="" /><div><span className="page-label">KOMA GUIDE</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p></div></div><div className="help-steps">{t.aboutSteps.map((step) => <section key={step.title}><strong>{step.title}</strong><p>{step.text}</p></section>)}</div><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}><Icon name="close" size={20} /></button><div className="info-modal-head"><img src="/koma-companion-girl.png" alt="" /><div><span className="page-label">KOMA GUIDE</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p></div></div><div className="help-steps">{t.aboutSteps.map((step) => <section key={step.title}><strong>{step.title}</strong><p>{step.text}</p></section>)}</div><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
 }
 
 export default App;
