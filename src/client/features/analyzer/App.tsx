@@ -947,6 +947,12 @@ function App() {
   // 点 Logo 回到首页只离开当前视图；永久任务继续处理并保留。
   function goHome() { leaveJob(); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
+  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+    const nextFile = event.currentTarget.files?.[0];
+    // A repeated selection of the same file must dispatch another change event.
+    event.currentTarget.value = "";
+    selectFile(nextFile);
+  }
 
   function toggleSuggestion(id: AnalysisSuggestionId) {
     setSuggestionIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -1107,7 +1113,7 @@ function App() {
               <button className={mode === "url" ? "selected" : ""} type="button" aria-pressed={mode === "url"} onClick={() => setMode("url")}><Glyph name="link" size={16} />{t.videoUrl}</button>
             </div>
             {mode === "upload" ? <div ref={dropZoneRef} className={`drop-zone ${file ? "has-file" : ""}`} onClick={() => fileInputRef.current?.click()} onDragOver={(event: DragEvent) => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }} role="button" tabIndex={0} aria-invalid={error === t.missingFile} aria-describedby={error === t.missingFile ? "analysis-form-error" : undefined} onKeyDown={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); fileInputRef.current?.click(); } }}>
-              <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
+              <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={chooseFile} />
               <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : fileHint}</small>
             </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} aria-invalid={error === t.missingUrl} aria-describedby={error === t.missingUrl ? "analysis-form-error" : undefined} /><small>{t.urlHint}</small></label>}
             {sourceError && <p id="analysis-form-error" className="form-error" role="alert">{error}</p>}
