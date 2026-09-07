@@ -134,6 +134,7 @@
 .app-shell .legacy-claim strong { font-size: 14px; }
 .app-shell .legacy-claim p { max-width: 650px; margin: 7px 0 0; font-size: 12px; line-height: 1.8; color: var(--ink-2); }
 .app-shell .legacy-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.app-shell .legacy-actions .text-button { min-height: 44px; padding: 0 10px; color: var(--ink-2); font-size: 13px; }
 .app-shell .legacy-claim ul { flex: 1 1 100%; list-style: none; padding: 0; margin: 5px 0 0; }
 .app-shell .legacy-claim li { display: flex; justify-content: space-between; gap: 20px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 12px; }
 .app-shell .legacy-claim li small { flex-shrink: 0; color: var(--muted); }
@@ -253,4 +254,10 @@
 @media (prefers-reduced-motion: reduce) {
   .app-shell *, .app-shell *::before, .app-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .app-shell .welcome-character:hover > img, .app-shell .library-row-main:hover h2 { transform: none; }
+}
+
+/* Preserve word boundaries when using the condensed display face in English. */
+:lang(en) .app-shell :is(.welcome-main h1, .compose-aside h1, .library-heading h1, .result-heading h1) {
+  letter-spacing: -.025em;
+  word-spacing: .045em;
 }
