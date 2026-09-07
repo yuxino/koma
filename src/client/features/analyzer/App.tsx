@@ -21,6 +21,7 @@ import { progressStepStates, translateProgressDetail } from "../../shared/progre
 import { translateTagCategory } from "../../shared/analysis-labels.js";
 import { WelcomeScreen } from "./WelcomeScreen.js";
 import { GithubStarLink } from "./GithubStarLink.js";
+import { pageMetadata, publicLanguage, publicPath } from "../../shared/public-site.js";
 import { Icon } from "../../shared/Icon.js";
 import { classifyMissingJobAccess, createWorkspaceRequestGuard, type AccessSession } from "./workspace-access.js";
 import { WorkspaceLibrary } from "./WorkspaceLibrary.js";
@@ -523,8 +524,9 @@ function Brand({ onClick, label }: { onClick?: () => void; label?: string }) {
     : <div className="brand-lockup"><CompanionPortrait className="brand-icon" variant="logo" /><div><strong>Koma</strong><span>VIDEO COMPANION</span></div></div>;
 }
 
-function App() {
-  const [language, setLanguage] = useState<Language>(() => window.localStorage.getItem("koma-language") === "zh" ? "zh" : "en");
+function App({ initialLanguage }: { initialLanguage?: Language } = {}) {
+  const [language, setLanguage] = useState<Language>(() => initialLanguage ?? (typeof window === "undefined" ? "en" : publicLanguage(window.location.pathname) ?? (window.localStorage.getItem("koma-language") === "zh" ? "zh" : "en")));
+  const isPublicEntry = typeof window === "undefined" || publicLanguage(window.location.pathname) !== undefined;
   const t = copy[language];
   const auth = useGithubSession();
   const authenticated = Boolean(auth.session?.authenticated);
@@ -560,6 +562,7 @@ function App() {
   const [schemaActionError, setSchemaActionError] = useState("");
   const [configNotice, setConfigNotice] = useState("");
   const [hasLegacyDraft, setHasLegacyDraft] = useState(() => {
+    if (typeof window === "undefined") return false;
     const saved = loadAnalysisConfig(window.localStorage);
     return Boolean(saved.draft.instruction || saved.draft.outputSchema || saved.draft.suggestionIds.length || saved.defaultConfig);
   });
@@ -614,8 +617,9 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
-    document.title = language === "zh" ? "Koma — AI 视频理解" : "Koma — AI Video Understanding";
-  }, [language]);
+    document.querySelectorAll("[data-koma-seo]").forEach((element) => element.remove());
+    document.head.insertAdjacentHTML("beforeend", pageMetadata(language, isPublicEntry && !authenticated && !job && !showHistory));
+  }, [language, isPublicEntry, authenticated, job?.id, showHistory]);
 
   useEffect(() => {
     if (authenticated && accountId === configAccountId) updateAnalysisDraft(accountStorage, currentAnalysisDraft);
@@ -671,6 +675,8 @@ function App() {
   useEffect(() => {
     if (auth.loading) return;
     const syncJobRoute = async () => {
+      const routeLanguage = publicLanguage(window.location.pathname);
+      if (routeLanguage) setLanguage(routeLanguage);
       jobRouteAbortRef.current?.abort();
       jobRouteAbortRef.current = null;
       jobPollAbortRef.current?.abort();
@@ -939,7 +945,7 @@ function App() {
     setUrl("");
     setError("");
     setUploadPercent(null);
-    window.history.pushState({}, "", "/");
+    window.history.pushState({}, "", publicPath(language));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function restartAnalysis() { leaveJob(); }
@@ -1099,15 +1105,15 @@ function App() {
   return <div className={`app-shell companion-ui${job?.result ? " has-result" : ""}`}>
     <header className="site-header"><div className="header-inner"><Brand onClick={job || showHistory ? goHome : undefined} label={t.backHome} />
       {authenticated && <nav className="workspace-nav" aria-label={language === "zh" ? "工作区导航" : "Workspace navigation"}><button type="button" className={!libraryActive ? "selected" : ""} aria-current={!libraryActive ? "page" : undefined} onClick={goHome}>{language === "zh" ? "新分析" : "New analysis"}</button><button type="button" className={libraryActive ? "selected" : ""} aria-current={libraryActive ? "page" : undefined} onClick={enterLibrary}>{language === "zh" ? "资料库" : "Library"}{Boolean(auth.session?.legacyJobCount) && <i aria-label={language === "zh" ? "有旧任务可找回" : "Older jobs available"} />}</button></nav>}
-      <div className="header-actions"><GithubStarLink language={language} /><button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
+      <div className="header-actions"><GithubStarLink language={language} />{isPublicEntry && !authenticated ? <a className="header-button language-button" href={publicPath(language === "en" ? "zh" : "en")} hrefLang={language === "en" ? "zh-CN" : "en"}>{t.language}</a> : <button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => { const next = language === "en" ? "zh" : "en"; if (isPublicEntry) window.history.replaceState({}, "", publicPath(next)); setLanguage(next); }}>{t.language}</button>}
       {authenticated && <span className="account-identity">{auth.session?.user?.avatarUrl && <img src={auth.session.user.avatarUrl} alt="" referrerPolicy="no-referrer" />}<span>{auth.session?.user?.login}</span></span>}
       <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" disabled={generatingSchema} aria-label={language === "zh" ? "更多选项" : "More options"} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a>{authenticated && <button type="button" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? (language === "zh" ? "正在退出…" : "Signing out…") : (language === "zh" ? "退出登录" : "Sign out")}</button>}</div>}</div>
     </div></div></header>
 
     <main className="main-shell">
       {accountError && <p className="account-error" role="alert">{accountError}</p>}
-      {auth.loading && !job && <div className="session-loading" role="status"><CompanionPortrait /><span>{language === "zh" ? "正在打开工作区…" : "Opening your workspace…"}</span></div>}
-      {!auth.loading && !authenticated && !job && <WelcomeScreen language={language} enabled={Boolean(auth.session?.enabled)} unavailable={auth.unavailable} expired={auth.expired} error={error} onRefresh={auth.refresh} />}
+      {auth.loading && !isPublicEntry && !job && <div className="session-loading" role="status"><CompanionPortrait /><span>{language === "zh" ? "正在打开工作区…" : "Opening your workspace…"}</span></div>}
+      {(!auth.loading || isPublicEntry) && !authenticated && !job && <WelcomeScreen language={language} enabled={auth.session?.enabled ?? isPublicEntry} unavailable={auth.unavailable} expired={auth.expired} error={error} onRefresh={auth.refresh} />}
       {authenticated && !job && showHistory && <WorkspaceLibrary key={accountId} language={language} onOpen={openHistoryJob} onDelete={deleteOwnedJob} onNew={goHome} onUnauthorized={auth.expire} legacyJobCount={auth.session?.legacyJobCount || 0} onClaimed={auth.refresh} />}
       {authenticated && !job && !showHistory && <section className="landing-layout workspace-compose">
         <aside className="compose-aside">

@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently -k \"tsx watch src/server/index.ts\" \"vite\"",
     "build": "npm run build:client && npm run build:server",
-    "build:client": "vite build",
+    "build:client": "vite build && tsx scripts/render-public.ts",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist-server/index.js",
     "test": "vitest run",

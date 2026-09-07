@@ -1,15 +1,18 @@
 import { StrictMode, type ComponentType } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import "./styles/atelier-foundation.css";
 
 const isAdminRoute = window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/");
 
 function renderRoute(RouteApp: ComponentType) {
-  createRoot(document.getElementById("root")!).render(
+  const root = document.getElementById("root")!;
+  const app = (
     <StrictMode>
       <RouteApp />
     </StrictMode>
   );
+  if (!isAdminRoute && root.dataset.prerendered === "true") hydrateRoot(root, app);
+  else createRoot(root).render(app);
 }
 
 if (isAdminRoute) {

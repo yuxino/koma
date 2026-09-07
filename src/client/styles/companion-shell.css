@@ -74,6 +74,12 @@ html:has(.companion-ui), body:has(.companion-ui) { background: #fafafa; }
 .app-shell.companion-ui .welcome-capabilities h2 { margin-bottom: 8px; font-size: 16px; line-height: 1.5; font-weight: 600; letter-spacing: -.025em; }
 .app-shell.companion-ui .welcome-capabilities p { max-width: 295px; font-size: 13px; line-height: 1.8; }
 .app-shell.companion-ui .welcome-footer { margin-top: 0; padding-top: 20px; border: 0; font-family: var(--font-ui); font-size: 10px; letter-spacing: .05em; color: #858585; }
+.app-shell.companion-ui .welcome-details { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 48px; padding-top: 28px; border-top: 1px solid var(--line); }
+.app-shell.companion-ui .welcome-details h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; }
+.app-shell.companion-ui .welcome-details p { margin: 0 0 10px; color: var(--ink-2); font-size: 13px; line-height: 1.9; }
+.app-shell.companion-ui .welcome-details a { color: var(--ink); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.app-shell.companion-ui .welcome-details a:hover { text-decoration-thickness: 2px; }
+@media (max-width: 600px) { .app-shell.companion-ui .welcome-details { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
 
 /* Compose: a compact greeting over a two-column working sheet. */
 .app-shell.companion-ui .landing-layout.workspace-compose { display: block; width: min(calc(100% - 80px), 1160px); padding: 28px 0 72px; }

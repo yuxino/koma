@@ -1,10 +1,9 @@
 import { createReadStream } from "node:fs";
 import { copyFile, stat } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { isIP } from "node:net";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
-import fastifyStatic from "@fastify/static";
 import { config } from "./config/config.js";
 import { createJob, deleteJob, loadJob, serializeJob, updateJob, type Job } from "./application/jobs.js";
 import { getTempAudio } from "./media/temp-audio.js";
@@ -15,6 +14,7 @@ import { extractUrlFromText } from "./media/resolver.js";
 import { normalizeVideoUrl } from "./media/url-source.js";
 import { parseByteRange } from "./media/video-stream.js";
 import { createDailyLimiter } from "./http/rate-limit.js";
+import { frontendResponseHeaders, registerFrontend } from "./http/frontend.js";
 import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis/analysis-spec.js";
 import { generateAnalysisSpec, validateAnalysisSpecGenerationLanguage, validateAnalysisSpecGenerationRequest } from "./analysis/analysis-spec-ai.js";
 import { contentDisposition } from "./persistence/artifacts.js";
@@ -49,9 +49,7 @@ const app = Fastify({
 const demoLimiter = createDailyLimiter(config.demoRequestsPerIpPerDay);
 const loginLimiter = createDailyLimiter(100);
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
-app.addHook("onRequest", async (request, reply) => {
-  if (request.url.startsWith("/api/")) reply.header("cache-control", "no-store");
-});
+app.addHook("onRequest", frontendResponseHeaders);
 
 app.get("/api/health", async () => {
   const providers = getRuntimeProviders();
@@ -413,17 +411,7 @@ async function sendStoredObject(request: FastifyRequest, reply: FastifyReply, ke
   }
 }
 
-const distPath = resolve("dist");
-try {
-  await stat(distPath);
-  await app.register(fastifyStatic, { root: distPath });
-  app.setNotFoundHandler((request, reply) => {
-    if (request.raw.url?.startsWith("/api/")) return reply.code(404).send({ error: "没有找到这个地址。" });
-    return reply.sendFile("index.html");
-  });
-} catch {
-  app.get("/", async (_, reply) => reply.type("text/plain").send("Run npm run dev for the frontend, or npm run build first."));
-}
+await registerFrontend(app);
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
 
