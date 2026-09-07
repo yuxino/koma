@@ -8,6 +8,18 @@ describe("workspace tools", () => {
     expect(filterJobs(jobs, "", "active")).toEqual([jobs[1]]);
     expect(filterJobs(jobs, "missing", "all")).toEqual([]);
   });
+  it("finds the completed analysis title and the original filename independently or together", () => {
+    const jobs = [
+      { title: "KOMA Workspace Check Verification", sourceTitle: "koma-verification.mp4", summary: "Upload, search, and export.", status: "done" },
+      { title: "lecture.mp4", status: "processing" }
+    ];
+    expect(filterJobs(jobs, "KOMA Workspace Check", "done")).toEqual([jobs[0]]);
+    expect(filterJobs(jobs, "KOMA-VERIFICATION.MP4", "all")).toEqual([jobs[0]]);
+    expect(filterJobs(jobs, "workspace mp4", "done")).toEqual([jobs[0]]);
+    expect(filterJobs(jobs, "koma-verification.mp4", "active")).toEqual([]);
+    expect(filterJobs(jobs, "lecture.mp4", "active")).toEqual([jobs[1]]);
+  });
+
   it("exports valid SRT indices, hour boundaries, nonempty cues, and normalized line endings", () => {
     expect(transcriptToSrt([{ startMs: 3599999, endMs: 3601002, text: "Hello\r\n\r\nworld" }, { startMs: 0, endMs: 5, text: " " }, { startMs: -3, endMs: 0, text: "你好" }]))
       .toBe("1\n00:59:59,999 --> 01:00:01,002\nHello\nworld\n\n2\n00:00:00,000 --> 00:00:00,001\n你好\n");

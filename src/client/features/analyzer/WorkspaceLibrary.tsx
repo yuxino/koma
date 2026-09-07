@@ -7,6 +7,7 @@ import { filterJobs } from "./workspace-utils.js";
 export interface LibraryJob {
   id: string;
   title: string;
+  sourceTitle?: string;
   source: "upload" | "url";
   status: "queued" | "processing" | "done" | "failed";
   progress: { stage: string; percent: number; detail: string };
@@ -17,8 +18,8 @@ export interface LibraryJob {
 }
 
 const words = {
-  zh: { title: "我的视频资料库", description: "每一段视频，都有迹可循。", search: "搜索标题、摘要或失败原因", all: "全部", active: "进行中", done: "已完成", failed: "未完成", empty: "资料库还是空的。", emptyText: "从一段想看懂的视频开始，分析和字幕会保存在这里。", noMatches: "没有符合条件的视频。", clear: "清除筛选", loading: "正在读取你的资料库…", create: "分析新视频", open: "打开视频", delete: "删除", deleting: "删除中…", url: "视频链接", upload: "本地上传", reload: "重新加载", private: "仅自己可见", count: "段视频", claim: "找回旧浏览器记录", claimText: "这个浏览器还有 {count} 个未绑定的旧任务。确认后将归入当前账号，并改为仅自己可见；已下载或缓存的副本无法收回。", claimAction: "归入我的资料库", claiming: "正在归入…", preview: "查看旧任务", queued: "排队中", processing: "分析中" },
-  en: { title: "Your video library", description: "Good moments deserve a place to return to.", search: "Search titles, summaries, or errors", all: "All", active: "In progress", done: "Complete", failed: "Unfinished", empty: "A little room for your next video.", emptyText: "Start with something you want to understand. Its analysis and transcript will live here.", noMatches: "No videos match these filters.", clear: "Clear filters", loading: "Loading your library…", create: "Analyze a video", open: "Open video", delete: "Delete", deleting: "Deleting…", url: "Video URL", upload: "Uploaded file", reload: "Reload", private: "Only you", count: "videos", claim: "Recover this browser’s older jobs", claimText: "This browser has {count} unclaimed jobs. Confirm to move them into this account and make them private. Previously downloaded or cached public copies cannot be recalled.", claimAction: "Move into my library", claiming: "Moving…", preview: "Review older jobs", queued: "Queued", processing: "Analyzing" }
+  zh: { title: "我的视频资料库", description: "每一段视频，都有迹可循。", search: "搜索标题、文件名、摘要或失败原因", all: "全部", active: "进行中", done: "已完成", failed: "未完成", empty: "资料库还是空的。", emptyText: "从一段想看懂的视频开始，分析和字幕会保存在这里。", noMatches: "没有符合条件的视频。", clear: "清除筛选", loading: "正在读取你的资料库…", create: "分析新视频", open: "打开视频", delete: "删除", deleting: "删除中…", url: "视频链接", upload: "本地上传", reload: "重新加载", private: "仅自己可见", count: "段视频", claim: "找回旧浏览器记录", claimText: "这个浏览器还有 {count} 个未绑定的旧任务。确认后将归入当前账号，并改为仅自己可见；已下载或缓存的副本无法收回。", claimAction: "归入我的资料库", claiming: "正在归入…", preview: "查看旧任务", queued: "排队中", processing: "分析中" },
+  en: { title: "Your video library", description: "Good moments deserve a place to return to.", search: "Search titles, filenames, summaries, or errors", all: "All", active: "In progress", done: "Complete", failed: "Unfinished", empty: "A little room for your next video.", emptyText: "Start with something you want to understand. Its analysis and transcript will live here.", noMatches: "No videos match these filters.", clear: "Clear filters", loading: "Loading your library…", create: "Analyze a video", open: "Open video", delete: "Delete", deleting: "Deleting…", url: "Video URL", upload: "Uploaded file", reload: "Reload", private: "Only you", count: "videos", claim: "Recover this browser’s older jobs", claimText: "This browser has {count} unclaimed jobs. Confirm to move them into this account and make them private. Previously downloaded or cached public copies cannot be recalled.", claimAction: "Move into my library", claiming: "Moving…", preview: "Review older jobs", queued: "Queued", processing: "Analyzing" }
 };
 
 export function WorkspaceLibrary({ language, onOpen, onDelete, onNew, onUnauthorized, legacyJobCount, onClaimed }: {

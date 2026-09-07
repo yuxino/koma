@@ -1,5 +1,6 @@
 export interface SearchableJob {
   title: string;
+  sourceTitle?: string;
   summary?: string;
   status: string;
   error?: string | null;
@@ -8,7 +9,7 @@ export interface SearchableJob {
 export function filterJobs<T extends SearchableJob>(jobs: readonly T[], query: string, status: string): T[] {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   return jobs.filter((job) => (status === "all" || (status === "active" ? job.status === "queued" || job.status === "processing" : job.status === status))
-    && words.every((word) => `${job.title} ${job.summary || ""} ${job.error || ""}`.toLocaleLowerCase().includes(word)));
+    && words.every((word) => `${job.title} ${job.sourceTitle || ""} ${job.summary || ""} ${job.error || ""}`.toLocaleLowerCase().includes(word)));
 }
 
 export interface ExportTranscriptLine { startMs: number; endMs: number; text: string; speaker?: string; }

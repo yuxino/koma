@@ -71,8 +71,8 @@ afterAll(async () => {
 
 async function seedJob(id: string, status: string) {
   const prefix = `koma/jobs/${id}`;
-  const result = { title: "Private video", summary: "Private summary", durationMs: 1000, chapters: [], tags: [], transcript: [{ startMs: 0, endMs: 1000, text: "Private words" }], frames: [{ filename: "frame.jpg", atMs: 0, storageKey: `${prefix}/frames/frame.jpg` }], extractedData: { private: true }, artifacts: [{ id: "0", name: "report.json", format: "json", mimeType: "application/json", content: "", sizeBytes: 2, storageKey: `${prefix}/artifacts/report.json` }] };
-  database.prepare("INSERT INTO koma_jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, "upload", "Private video", status, status, 100, "Ready", "zh", JSON.stringify({ instruction: "Reuse me", artifactFormats: ["json"] }), status === "done" ? JSON.stringify(result) : null, "mock", "mock", "mock", "mock", Date.now(), Date.now(), status === "done" ? Date.now() : null, prefix, `${prefix}/video/source.mp4`, "video/mp4", 1, status === "failed" ? "Failed" : null);
+  const result = { title: id === own ? "KOMA Workspace Check Verification" : "Private video", summary: "Private summary", durationMs: 1000, chapters: [], tags: [], transcript: [{ startMs: 0, endMs: 1000, text: "Private words" }], frames: [{ filename: "frame.jpg", atMs: 0, storageKey: `${prefix}/frames/frame.jpg` }], extractedData: { private: true }, artifacts: [{ id: "0", name: "report.json", format: "json", mimeType: "application/json", content: "", sizeBytes: 2, storageKey: `${prefix}/artifacts/report.json` }] };
+  database.prepare("INSERT INTO koma_jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, "upload", "koma-verification.mp4", status, status, 100, "Ready", "zh", JSON.stringify({ instruction: "Reuse me", artifactFormats: ["json"] }), status === "done" ? JSON.stringify(result) : null, "mock", "mock", "mock", "mock", Date.now(), Date.now(), status === "done" ? Date.now() : null, prefix, `${prefix}/video/source.mp4`, "video/mp4", 1, status === "failed" ? "Failed" : null);
   for (const [path, bytes] of [["video/source.mp4", "not-a-real-video"], ["frames/frame.jpg", "frame"], ["artifacts/report.json", "{}"]]) {
     const target = join(root, "storage", prefix, path);
     await mkdir(join(target, ".."), { recursive: true });
@@ -91,7 +91,10 @@ describe("account workspace HTTP boundaries", () => {
     expect(await (await get("/api/my/jobs", cookieB)).json()).toEqual({ jobs: [] });
     const history = await (await get("/api/my/jobs", cookieA)).json() as { jobs: Array<Record<string, unknown>> };
     expect(history.jobs.map((job) => job.id).sort()).toEqual([own, failed, missingSource].sort());
-    expect(history.jobs.find((job) => job.id === own)).toMatchObject({ summary: "Private summary", durationMs: 1000 });
+    expect(history.jobs.find((job) => job.id === own)).toMatchObject({
+      title: "KOMA Workspace Check Verification", sourceTitle: "koma-verification.mp4", summary: "Private summary", durationMs: 1000
+    });
+    expect(history.jobs.find((job) => job.id === failed)).toMatchObject({ title: "koma-verification.mp4", sourceTitle: "koma-verification.mp4" });
     expect(history.jobs.find((job) => job.id === failed)?.retryable).toBe(true);
     expect((await get("/api/admin/jobs", cookieA)).status).toBe(401);
     expect((await get("/api/admin/settings", cookieA)).status).toBe(401);

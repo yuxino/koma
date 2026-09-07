@@ -462,7 +462,14 @@ async function canRetryJob(job: Job): Promise<boolean> {
 
 async function accountHistoryRecord(record: JobHistoryRecord) {
   const job = await loadJob(record.id);
-  return { ...publicHistoryRecord(record), retryable: Boolean(job && await canRetryJob(job)), summary: job?.result?.summary || null, durationMs: job?.result?.durationMs || null };
+  return {
+    ...publicHistoryRecord(record),
+    title: record.status === "done" ? job?.result?.title?.trim() || record.title : record.title,
+    sourceTitle: record.title,
+    retryable: Boolean(job && await canRetryJob(job)),
+    summary: job?.result?.summary || null,
+    durationMs: job?.result?.durationMs || null
+  };
 }
 
 function requireAdminMutation(request: FastifyRequest, reply: FastifyReply): boolean {
