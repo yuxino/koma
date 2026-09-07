@@ -80,6 +80,9 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ANALYSIS_REQUIRE_ADMIN: ${{ secrets.ANALYSIS_REQUIRE_ADMIN }}
           KOMA_CONFIG_SECRET: ${{ secrets.KOMA_CONFIG_SECRET }}
+          GITHUB_CLIENT_ID: ${{ secrets.KOMA_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.KOMA_GITHUB_CLIENT_SECRET }}
+          GITHUB_CALLBACK_URL: ${{ secrets.KOMA_GITHUB_CALLBACK_URL }}
           DB_DRIVER: ${{ secrets.DB_DRIVER }}
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_PORT: ${{ secrets.DB_PORT }}
@@ -101,7 +104,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           timeout: 30m
-          envs: NODE_VERSION,APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY,ADMIN_PASSWORD,ANALYSIS_REQUIRE_ADMIN,KOMA_CONFIG_SECRET,DB_DRIVER,DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,DB_SSL,DB_AUTO_CREATE,STORAGE_DRIVER,LOCAL_STORAGE_PATH,OSS_REGION,OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET,OSS_UPLOAD_PREFIX,OSS_PUBLIC_BASE_URL
+          envs: NODE_VERSION,APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY,ADMIN_PASSWORD,ANALYSIS_REQUIRE_ADMIN,KOMA_CONFIG_SECRET,GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET,GITHUB_CALLBACK_URL,DB_DRIVER,DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,DB_SSL,DB_AUTO_CREATE,STORAGE_DRIVER,LOCAL_STORAGE_PATH,OSS_REGION,OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET,OSS_UPLOAD_PREFIX,OSS_PUBLIC_BASE_URL
           script: |
             set -e
             runtime_version="$NODE_VERSION"
@@ -137,12 +140,12 @@ jobs:
             unset VISION_PROVIDER VISION_API_KEY VISION_BASE_URL VISION_MODEL
             unset GEMINI_API_KEY OPENROUTER_API_KEY PUBLIC_BASE_URL ASR_DIARIZATION
             unset DEMO_REQUESTS_PER_IP_PER_DAY ADMIN_PASSWORD ANALYSIS_REQUIRE_ADMIN KOMA_CONFIG_SECRET
+            unset GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET GITHUB_CALLBACK_URL
             unset DB_DRIVER KOMA_DATABASE_PATH DB_HOST DB_PORT DB_USER DB_PASSWORD
             unset DB_NAME DB_SSL DB_CONNECTION_LIMIT DB_AUTO_CREATE
             unset STORAGE_DRIVER LOCAL_STORAGE_PATH OSS_REGION OSS_ACCESS_KEY_ID
             unset OSS_ACCESS_KEY_SECRET OSS_BUCKET OSS_UPLOAD_PREFIX OSS_PUBLIC_BASE_URL
             unset OSS_SIGNED_URL_SECONDS OSS_TIMEOUT_MS TRUST_PROXY
-            pm2 delete ding-frame 2>/dev/null || true
             pm2 delete koma 2>/dev/null || true
             pm2 start dist-server/index.js --name koma --interpreter "$node_bin"
             pm2 save
@@ -161,10 +164,12 @@ jobs:
               ok: health.ok === true,
               database: health.database?.driver || null,
               storage: health.storage?.driver || null,
-              admin: health.features?.admin === true
+              admin: health.features?.admin === true,
+              github: health.configured?.github === true
             };
             console.log(JSON.stringify(summary));
             if (!summary.ok) process.exit(1);
+            if (!summary.github) process.exit(1);
             if (expectedDatabase && summary.database !== expectedDatabase) process.exit(1);
             if (expectedStorage && summary.storage !== expectedStorage) process.exit(1);
             if (expectedAdmin === "true" && !summary.admin) process.exit(1);

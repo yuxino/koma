@@ -1,3 +1,5 @@
+import { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -6,7 +8,6 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const jsonHeaders = { "content-type": "application/json" };
-const analysisHeaders = { "x-koma-admin": "1" };
 let child: ChildProcessWithoutNullStreams | undefined;
 let root = "";
 let baseUrl = "";
@@ -21,6 +22,10 @@ beforeAll(async () => {
     env: {
       ...process.env,
       PORT: String(port),
+      GITHUB_CLIENT_ID: "",
+      GITHUB_CLIENT_SECRET: "",
+      GITHUB_CALLBACK_URL: "",
+      PUBLIC_BASE_URL: baseUrl,
       TEMP_ROOT: join(root, "tmp"),
       DB_DRIVER: "sqlite",
       KOMA_DATABASE_PATH: join(root, "koma.sqlite"),
@@ -38,6 +43,10 @@ beforeAll(async () => {
   child.stdout.on("data", (chunk) => { serverOutput += chunk.toString(); });
   child.stderr.on("data", (chunk) => { serverOutput += chunk.toString(); });
   await waitForHealth();
+  const database = new DatabaseSync(join(root, "koma.sqlite"));
+  database.prepare("INSERT INTO koma_accounts VALUES (?, ?, ?, ?, ?)").run("1", "test-user", null, "https://avatars.githubusercontent.com/u/1", Date.now());
+  database.prepare("INSERT INTO koma_account_sessions VALUES (?, ?, ?)").run(createHash("sha256").update("t".repeat(43)).digest("hex"), "1", Date.now() + 3600000);
+  database.close();
 }, 15_000);
 
 afterAll(async () => {
@@ -52,80 +61,38 @@ afterAll(async () => {
 }, 10_000);
 
 describe("private analysis access", () => {
-  it.each([
-    ["AI JSON generation", "/api/analysis-spec/generate", jsonRequest({ instruction: "提取人物", additions: [], lang: "zh" }, true)],
-    ["URL analysis", "/api/analyze/url", jsonRequest({ url: "not-a-url" }, true)],
-    ["video upload", "/api/analyze/upload", { method: "POST", headers: analysisHeaders, body: new FormData() } satisfies RequestInit]
-  ])("requires the existing admin session for %s", async (_label, path, init) => {
-    const response = await fetch(`${baseUrl}${path}`, init);
+  it.each(["/api/analysis-spec/generate", "/api/analyze/url", "/api/analyze/upload"])("requires GitHub identity for %s even with an admin session", async (path) => {
+    const login = await fetch(`${baseUrl}/api/admin/login`, {
+      method: "POST", headers: { ...jsonHeaders, "x-koma-admin": "1" }, body: JSON.stringify({ password: "test-admin-password" })
+    });
+    const cookie = login.headers.get("set-cookie")!.split(";", 1)[0];
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: "POST", headers: { ...jsonHeaders, "x-koma-client": "1", cookie }, body: JSON.stringify({})
+    });
     expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: "请先登录管理后台，再开始生成或分析。" });
+    await expect(response.json()).resolves.toEqual({ error: "请先使用 GitHub 登录，再继续操作。" });
   });
 
-  it("allows requests to reach normal validation after administrator sign-in", async () => {
+  it("retains the separate administrator restriction after GitHub sign-in", async () => {
+    const accountCookie = `koma_session=${"t".repeat(43)}`;
+    const headers = { ...jsonHeaders, "x-koma-client": "1", cookie: accountCookie };
+    const denied = await fetch(`${baseUrl}/api/analyze/url`, { method: "POST", headers, body: "{}" });
+    expect(denied.status).toBe(403);
     const login = await fetch(`${baseUrl}/api/admin/login`, {
-      method: "POST",
-      headers: { ...jsonHeaders, "x-koma-admin": "1" },
-      body: JSON.stringify({ password: "test-admin-password" })
+      method: "POST", headers: { ...jsonHeaders, "x-koma-admin": "1" }, body: JSON.stringify({ password: "test-admin-password" })
     });
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
-    expect(cookie).toMatch(/^koma_admin=/);
+    const adminCookie = login.headers.get("set-cookie")!.split(";", 1)[0];
+    const allowed = await fetch(`${baseUrl}/api/analyze/url`, { method: "POST", headers: { ...headers, cookie: `${accountCookie}; ${adminCookie}` }, body: "{}" });
+    expect(allowed.status).toBe(400);
+  });
 
-    const missingHeaderChecks: Array<[string, RequestInit]> = [
-      ["/api/analysis-spec/generate", {
-        method: "POST",
-        headers: { ...jsonHeaders, cookie: cookie! },
-        body: JSON.stringify({ instruction: "提取人物", additions: [], lang: "zh" })
-      }],
-      ["/api/analyze/url", {
-        method: "POST",
-        headers: { ...jsonHeaders, cookie: cookie! },
-        body: JSON.stringify({ url: "not-a-url" })
-      }],
-      ["/api/analyze/upload", {
-        method: "POST",
-        headers: { cookie: cookie! },
-        body: new FormData()
-      }]
-    ];
-    for (const [path, init] of missingHeaderChecks) {
-      const response = await fetch(`${baseUrl}${path}`, init);
-      expect(response.status, path).toBe(403);
+  it("rejects browser mutations without the client header before processing input", async () => {
+    for (const path of ["/api/analysis-spec/generate", "/api/analyze/url", "/api/analyze/upload"]) {
+      const response = await fetch(`${baseUrl}${path}`, { method: "POST", headers: jsonHeaders, body: "{}" });
+      expect(response.status).toBe(403);
     }
-
-    const generation = await fetch(`${baseUrl}/api/analysis-spec/generate`, {
-      method: "POST",
-      headers: { ...jsonHeaders, ...analysisHeaders, cookie: cookie! },
-      body: JSON.stringify({ instruction: "提取人物", additions: [], lang: "zh" })
-    });
-    expect(generation.status).toBe(503);
-
-    const url = await fetch(`${baseUrl}/api/analyze/url`, {
-      method: "POST",
-      headers: { ...jsonHeaders, ...analysisHeaders, cookie: cookie! },
-      body: JSON.stringify({ url: "not-a-url" })
-    });
-    expect(url.status).toBe(400);
-
-    const uploadBody = new FormData();
-    uploadBody.append("video", new Blob(["not a video"], { type: "text/plain" }), "not-video.txt");
-    const upload = await fetch(`${baseUrl}/api/analyze/upload`, {
-      method: "POST",
-      headers: { ...analysisHeaders, cookie: cookie! },
-      body: uploadBody
-    });
-    expect(upload.status).toBe(415);
   });
 });
-
-function jsonRequest(body: unknown, includeAnalysisHeader = false): RequestInit {
-  return {
-    method: "POST",
-    headers: includeAnalysisHeader ? { ...jsonHeaders, ...analysisHeaders } : jsonHeaders,
-    body: JSON.stringify(body)
-  };
-}
 
 async function availablePort(): Promise<number> {
   const server = createServer();

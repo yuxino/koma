@@ -11,6 +11,9 @@ const cleanup: string[] = [];
 const scriptPath = resolve(process.cwd(), "scripts/write-deployment-env.mjs");
 
 const deploymentSettings = {
+  GITHUB_CLIENT_ID: "test-client-id",
+  GITHUB_CLIENT_SECRET: "test-client-secret-not-real",
+  GITHUB_CALLBACK_URL: "https://koma.example.com/api/auth/github/callback",
   MAX_UPLOAD_BYTES: "104857600",
   MAX_DURATION_SECONDS: "180",
   FRAME_WIDTH: "960",
@@ -35,6 +38,9 @@ const deploymentSettings = {
 } as const;
 
 const documentedDefaults = {
+  GITHUB_CLIENT_ID: "",
+  GITHUB_CLIENT_SECRET: "",
+  GITHUB_CALLBACK_URL: "",
   MAX_UPLOAD_BYTES: "524288000",
   MAX_DURATION_SECONDS: "900",
   FRAME_WIDTH: "1280",

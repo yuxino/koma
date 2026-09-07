@@ -2,23 +2,32 @@
 
 Koma 的分析任务是异步的。提交视频后轮询任务，完成后既可以读取完整视频理解结果，也可以只取自定义提取出的 JSON。
 
+## 身份验证
+
+网页分析、AI JSON 生成和个人历史都需要 GitHub 登录。GitHub 身份与管理员权限相互独立，登录其中一种不会得到另一种权限。
+
+| 方法 | 地址 | 用途 |
+| --- | --- | --- |
+| `GET` | `/api/auth/session` | 返回 `{ enabled, authenticated, user, legacyJobCount }`；未登录时 `user` 为 null |
+| `GET` | `/api/auth/github?returnTo=/` | 在浏览器中发起已配置 GitHub App 的授权流程 |
+| `GET` | `/api/auth/github/callback` | 校验 GitHub 回调并建立 Koma 账号会话 |
+| `DELETE` | `/api/auth/session` | 撤销当前账号会话、清除 Cookie，返回 `204`；需要 `X-Koma-Client: 1` |
+
+已登录的 `user` 包含 `{ id, login, name, avatarUrl }`；`id` 是以字符串表示的稳定 GitHub 数字 ID，`name` 可以为 null。未登录时 `legacyJobCount` 为零；登录后则表示当前旧浏览器 Cookie 下尚未认领的任务数量。会话响应使用 `cache-control: no-store`。
+
+`koma_session` Cookie 为 HttpOnly、SameSite=Lax，作用路径为 `/`，HTTPS 下带 Secure。会话在建立七天后到期，不会随访问延长；数据库只保存令牌哈希。退出会撤销当前浏览器的账号会话，不会退出其他设备或独立的管理员会话。重新授权会替换当前 Koma 会话。GitHub 令牌只用于获取公开用户资料，不会持久化或返回浏览器。
+
+OAuth 尝试有效期为十分钟，使用一次性 state、独立的 `koma_oauth` 浏览器 Cookie 和 PKCE S256。`returnTo` 只接受站内路径，拒绝外部来源、双斜杠地址和 API 路径。取消授权、回调过期/无效、Provider 或配置异常时，分别返回 `/?auth=cancelled`、`/?auth=expired` 或 `/?auth=unavailable`。
+
+单台服务按 IP 限制每个 UTC 日最多发起 100 次登录；超过后返回 `429` 和 `Retry-After`，不会再创建待处理的 OAuth 尝试。这个限制独立于分析演示额度。
+
 ## 分析权限
 
-AI JSON 生成和视频地址/文件分析默认对游客开放，即使 `ADMIN_PASSWORD` 已启用 `/admin` 也不会改变。只有同时配置 `ADMIN_PASSWORD` 与 `ANALYSIS_REQUIRE_ADMIN=true` 后，`POST /api/analysis-spec/generate`、`POST /api/analyze/url` 和 `POST /api/analyze/upload` 才要求携带由 `POST /api/admin/login` 建立的 `koma_admin` 管理员会话，以及同源请求头 `x-koma-admin: 1`。请求头正确但未登录时返回 `401`；请求头缺失或错误时返回 `403`。管理员登录后，Koma 浏览器界面会自动发送 HttpOnly Cookie 和该请求头；API 客户端需要自行保存 Cookie 并补上请求头。
+`POST /api/analysis-spec/generate`、`POST /api/analyze/url`、`POST /api/analyze/upload` 和 `POST /api/my/jobs/:id/retry` 都需要有效的 GitHub 账号会话和 `X-Koma-Client: 1` 请求头。其他账号写操作使用同一请求头，同时兼容旧的 `x-koma-user: 1`。Fetch Metadata 表示跨站，或请求携带的 Origin 与配置的回调来源不一致时，会拒绝请求。
 
-只读任务和回看接口在两种模式下都不变。
+请求头缺失或错误返回 `403`；通过该校验后，没有账号会话返回 `401`。同时配置 `ADMIN_PASSWORD` 与 `ANALYSIS_REQUIRE_ADMIN=true` 时，还必须携带有效的 `koma_admin` 会话，否则返回 `403`。只有管理员会话不能提交网页任务。后台写操作仍使用独立的 `x-koma-admin: 1` 请求头。
 
-下方提交示例默认使用公开模式。受保护模式应先登录一次并保存 Cookie：
-
-```bash
-curl -X POST http://localhost:3000/api/admin/login \
-  -H 'content-type: application/json' \
-  -H 'x-koma-admin: 1' \
-  -c cookies.txt \
-  -d '{"password":"YOUR_ADMIN_PASSWORD"}'
-```
-
-随后给三个受保护请求都加上 `-b cookies.txt -H 'x-koma-admin: 1'`。
+Koma 界面会自动发送 Cookie 和请求头。下方 curl 示例假设 `cookies.txt` 已包含通过浏览器授权获得的有效 Koma 账号会话；此 API 不提供密码、PAT 或机器令牌登录。管理员限定模式还需要同一 Cookie Jar 中的管理员会话。无需网页登录的本地文件分析可使用[本地 CLI](../README.zh-CN.md#cli)。
 
 ## 用 AI 整理 JSON 结构
 
@@ -26,6 +35,7 @@ curl -X POST http://localhost:3000/api/admin/login \
 
 ```bash
 curl -X POST http://localhost:3000/api/analysis-spec/generate \
+  -b cookies.txt -H 'X-Koma-Client: 1' \
   -H 'content-type: application/json' \
   -d '{
     "instruction": "识别车牌，输出城市和省份",
@@ -57,12 +67,13 @@ curl -X POST http://localhost:3000/api/analysis-spec/generate \
 
 只有配置了真实视觉 Provider 及其凭据时，这个接口才可用。它与视频分析共用演示额度，无效请求会在消耗额度前被拒绝。模型第一次返回的内容若无法解析，或未通过 JSON 结构/路径校验，Koma 会用更严格的要求自动请求一次完整修复结果；修复后仍无效才返回 `502`，Provider 请求失败则不重试。
 
-无效输入返回 `400`，受保护模式下缺少管理员会话返回 `401`、缺少请求头返回 `403`，请求体过大返回 `413`，演示额度耗尽返回 `429`，Provider 请求失败或修复结果仍无效返回 `502`，视觉 Provider 不可用或未配置返回 `503`。
+无效输入返回 `400`，缺少账号会话返回 `401`，请求校验或可选管理员要求未通过返回 `403`，请求体过大返回 `413`，演示额度耗尽返回 `429`，Provider 请求失败或修复结果仍无效返回 `502`，视觉 Provider 不可用或未配置返回 `503`。
 
 ## 视频地址
 
 ```bash
 curl -X POST http://localhost:3000/api/analyze/url \
+  -b cookies.txt -H 'X-Koma-Client: 1' \
   -H 'content-type: application/json' \
   -d '{
     "url": "https://example.com/video.mp4",
@@ -77,13 +88,13 @@ curl -X POST http://localhost:3000/api/analyze/url \
   }'
 ```
 
-返回 `202`。这个 ID 同时组成永久、不可猜的回看地址 `/jobs/JOB_ID`：
+返回 `202`。这个 ID 同时组成私有回看地址 `/jobs/JOB_ID`：
 
 ```json
 { "jobId": "..." }
 ```
 
-未设置 `ANALYSIS_REQUIRE_ADMIN=true` 时，视频地址提交接口对外公开。Koma 尚未完整阻止重定向或解析到私有、链路本地地址的域名。管理员登录只能限制调用者，不能充当出站网络隔离；公开部署仍应配置出站策略或可信 URL 白名单。
+视频地址提交需要 GitHub 登录。Koma 尚未完整阻止重定向或解析到私有、链路本地地址的域名。身份验证只能限制调用者，不能充当出站网络隔离；允许不可信用户使用的部署仍应配置出站策略或可信 URL 白名单。
 
 ## 本地上传
 
@@ -91,6 +102,7 @@ multipart 中的文本字段必须放在 `video` 文件字段之前：
 
 ```bash
 curl -X POST 'http://localhost:3000/api/analyze/upload?lang=zh' \
+  -b cookies.txt -H 'X-Koma-Client: 1' \
   -F 'instruction=提取所有商品、价格和首次出现时间' \
   -F 'outputSchema={"products":[{"name":"string","price":0,"atMs":0}]}' \
   -F 'artifactFormats=["json","csv"]' \
@@ -101,14 +113,16 @@ curl -X POST 'http://localhost:3000/api/analyze/upload?lang=zh' \
 
 ## 读取结果
 
+账号任务的每个任务、提取 JSON、产物、视频和关键帧接口都会校验所有者或管理员会话。未登录或其他账号访问时返回 `404`，与任务不存在时一致。尚未认领的旧链接保留只读访问。任务响应包含 `owned`、`visibility`（`private` 或 `legacy-link`）和 `retryable`。
+
 ```bash
-curl http://localhost:3000/api/jobs/JOB_ID
+curl -b cookies.txt http://localhost:3000/api/jobs/JOB_ID
 ```
 
 任务完成后，完整响应的 `result.extractedData` 是按要求提取的数据。若只需要目标 JSON，不要 Koma 的标题、章节等外层结构：
 
 ```bash
-curl http://localhost:3000/api/jobs/JOB_ID/extraction
+curl -b cookies.txt http://localhost:3000/api/jobs/JOB_ID/extraction
 ```
 
 这个接口原样返回 `extractedData`。任务仍在执行时返回 `409`；没有请求自定义提取或任务已被删除时返回 `404`。
@@ -127,18 +141,27 @@ curl http://localhost:3000/api/jobs/JOB_ID/extraction
 }
 ```
 
-访问 `downloadUrl` 即可下载持久化文件；视频和关键帧也通过同一套只读任务 API 提供。当前只生成文本类产物，不接受模型返回的 base64 或二进制文件。
+携带有权限的会话访问 `downloadUrl`，即可下载持久化文件；视频和关键帧使用相同权限校验。OSS 响应会跳转到短期签名地址；拿到该地址的人在到期前仍可使用它。当前只生成文本类产物，不接受模型返回的 base64 或二进制文件。
+
+浏览器还可直接从已保存的结果导出 Markdown 笔记和 SRT 字幕，无需再次调用模型；这与模型生成的 `result.artifacts` 是两种独立的导出方式。
 
 ## 我的任务
 
-浏览器首次提交任务或访问历史接口时会收到一年有效的 `koma_viewer` HttpOnly Cookie。Koma 只在数据库保存其哈希，并用它列出和删除该浏览器创建的任务：
+个人历史跟随 GitHub 账号，在不同浏览器登录后都可恢复。以下接口均需要有效账号会话；写操作还需要 `X-Koma-Client: 1`。
 
 | 方法 | 地址 | 用途 |
 | --- | --- | --- |
-| `GET` | `/api/my/jobs` | 读取当前浏览器最近 100 个任务的轻量历史 |
-| `DELETE` | `/api/my/jobs/:id` | 永久删除当前浏览器创建的任务；同时需要 `x-koma-user: 1` 请求头 |
+| `GET` | `/api/my/jobs` | 读取账号最近 200 个任务，包含摘要、时长、状态和 `retryable` |
+| `GET` | `/api/my/jobs/legacy` | 列出当前已有 `koma_viewer` Cookie 能证明归属、尚未认领的任务 |
+| `POST` | `/api/my/jobs/claim` | 明确把这些浏览器任务转入当前账号；返回 `{ claimed }` |
+| `POST` | `/api/my/jobs/:id/retry` | 从可恢复的失败任务创建新的账号任务；返回 `202` 和 `{ jobId }` |
+| `DELETE` | `/api/my/jobs/:id` | 永久删除当前账号拥有的任务；返回 `204` |
 
-直接访问公开链接仍是只读操作。`DELETE /api/jobs/:id` 返回 `405`，仅有任务 ID 或分享链接不能删除任务。命令行客户端如果要保留归属，需要用 Cookie Jar（例如 curl 的 `-c cookies.txt -b cookies.txt`）。
+认领新增账号归属，并限制之后的回看和源站对象访问，但不能收回此前下载的文件或缓存的公开响应。它不会取得其他浏览器的任务，也不会覆盖已有账号归属。没有有效的旧 Cookie 时，列表为空、认领数为零；清除 Cookie 后不能靠任务 ID 恢复证明。如果对象私有权限设置失败，认领可返回 `503`，并且不会把任务分配给账号。
+
+只有失败且保留来源 URL 或视频文件的任务可以重试。重试复制原语言和分析要求，使用当前配置的 Provider，并保留原失败记录；有保存的视频时优先使用，不重新下载 URL。任务正在执行或已完成、来源缺失、保留视频无法读取时返回 `409`；其他账号的任务返回 `404`。重试同样受分析权限和单 IP 演示额度限制；保存的 URL 仍可能在新分析中因过期或站点问题而失败。
+
+`DELETE /api/jobs/:id` 返回 `405`，应使用账号或后台删除接口。删除会移除持久化记录和整个任务存储目录。当前没有把新账号任务改为公开的 API。
 
 ## 管理 API
 

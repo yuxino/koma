@@ -1,6 +1,6 @@
 # 配置
 
-复制 `.env.example` 为 `.env`。不配置模型凭证时，Koma 会使用 mock 数据跑通完整流程。
+复制 `.env.example` 为 `.env`。不配置模型凭证时，Koma 会返回演示分析数据；网页提交仍需要 [GitHub 登录](#github-登录)。
 
 Koma 把 AI 分成两个独立阶段：
 
@@ -13,6 +13,26 @@ Koma 把 AI 分成两个独立阶段：
 默认 mock 模式可以演示总结、章节和时间线，但不会伪造结构化业务数据；按要求提取必须配置真实视觉模型。
 
 AI 整理 JSON 结构通常只调用一次视觉 Provider。若结果无法解析，或未通过结构/路径校验，Koma 会再发起一次要求更严格的修复请求，然后才返回无效输出错误。
+
+## GitHub 登录
+
+网页分析需要 GitHub 账号，AI Provider 使用演示数据时也一样。本地 CLI 独立运行，不要求网页登录。
+
+为自己的部署注册一个 **GitHub App**，填写用户授权回调地址。仓库、组织和账号权限都不申请，并关闭 Webhook；Koma 只读取用于登录的公开用户资料。这个登录流程不需要安装到仓库，不需要 App 私钥，也不需要另建 OAuth App。可参考 GitHub 的[注册说明](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app)和[权限模型](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)。
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `GITHUB_CLIENT_ID` | 空 | GitHub App 的 Client ID，不是数字 App ID |
+| `GITHUB_CLIENT_SECRET` | 空 | GitHub App 的 Client Secret，只能放在服务端 |
+| `GITHUB_CALLBACK_URL` | 空 | 与注册项完全一致、以 `/api/auth/github/callback` 结尾的回调地址 |
+
+本地使用 `npm run dev` 时，注册并设置 `http://localhost:5173/api/auth/github/callback`，从 `http://localhost:5173` 打开应用。Vite 会把 `/api` 转发给后端。登录前后应保持主机名一致，`localhost` 和 `127.0.0.1` 不共享 Cookie。线上使用自己的 HTTPS 域名，例如 `https://koma.yuxino.cn/api/auth/github/callback`。回调地址不能包含用户名密码、查询参数或片段；普通 HTTP 只允许用于本机开发。
+
+使用仓库的 GitHub Actions 部署时，Secret 名称应为 `KOMA_GITHUB_CLIENT_ID`、`KOMA_GITHUB_CLIENT_SECRET` 和 `KOMA_GITHUB_CALLBACK_URL`；工作流会映射为上方的运行时变量。GitHub Actions 保留了以 `GITHUB_` 开头的 Secret 名称。详见[部署说明](../DEPLOY.md)。
+
+Client Secret 只能保存在受保护的服务器环境或部署 Secret 中，不能放入浏览器配置或 `VITE_*` 变量。GitHub 配置缺失或无效时，无法发起新的登录，也不会退回匿名网页分析。真实视频分析仍需另外配置 Provider。
+
+Koma 使用一次性、绑定发起浏览器的 OAuth state 和 PKCE S256。自身的 HttpOnly 会话有效期为七天；GitHub 访问令牌只用于获取用户资料，不会保存。会话与退出行为见[身份验证 API](API.zh-CN.md#身份验证)。
 
 ## Provider 预设
 
@@ -57,9 +77,9 @@ OPENROUTER_API_KEY=...
 - 单 IP 每个 UTC 日 3 次；
 - 同时只分析 1 个任务。
 
-结果会永久保留。提交者可以从“我的任务”删除当前浏览器创建的任务，管理员也应定期在 `/admin` 查看存储占用并清理不需要的演示任务。
+结果会一直保留到删除。提交者可以从“我的任务”删除自己账号的任务，管理员也应定期在 `/admin` 查看存储占用并清理不需要的演示任务。
 
-配置 `ADMIN_PASSWORD` 可启用运营后台。游客的 AI JSON 生成和两个分析提交接口默认仍然公开；仅私人单用户部署需要设置 `ANALYSIS_REQUIRE_ADMIN=true`。每日限流只能减少请求量，不能替代身份验证或形成 SSRF 边界。
+为演示用户配置 GitHub 登录，另用 `ADMIN_PASSWORD` 启用运营后台。若分析还需要管理员身份，设置 `ANALYSIS_REQUIRE_ADMIN=true`。每日限流只能减少请求量，不能替代身份验证或形成 SSRF 边界。
 
 内置限流适合单机演示，多实例部署应在网关或共享存储中统一限流。nginx 后设置 `TRUST_PROXY=true` 前，必须确认代理会覆盖客户端伪造的 `X-Forwarded-For`。
 
@@ -140,14 +160,14 @@ VISION_MODEL=vision-model
 
 ## 管理平台与数据库
 
-配置 `ADMIN_PASSWORD` 后可访问 `/admin`，在页面中修改 Provider、模型、Base URL 和 API Key。游客的 AI JSON 生成、视频地址分析和文件上传分析默认保持公开；设置 `ANALYSIS_REQUIRE_ADMIN=true` 后才复用管理员会话进行保护。API Key 会先用 AES-256-GCM 加密再写入数据库，浏览器只会收到末四位掩码。建议额外配置稳定、随机的 `KOMA_CONFIG_SECRET`；如果省略则回退使用 `ADMIN_PASSWORD` 作为加密密钥。
+配置 `ADMIN_PASSWORD` 后可访问 `/admin`，在页面中修改 Provider、模型、Base URL 和 API Key。AI JSON 生成、视频地址分析和文件上传分析都需要 GitHub 登录；设置 `ANALYSIS_REQUIRE_ADMIN=true` 后，还需要独立的管理员会话。API Key 会先用 AES-256-GCM 加密再写入数据库，浏览器只会收到末四位掩码。建议额外配置稳定、随机的 `KOMA_CONFIG_SECRET`；如果省略则回退使用 `ADMIN_PASSWORD` 作为加密密钥。
 
 本地默认使用 `DB_DRIVER=sqlite` 和 `./data/koma.sqlite`。线上可使用独立 MySQL 数据库：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ADMIN_PASSWORD` | 空 | 启用 `/admin`；游客分析默认仍然公开 |
-| `ANALYSIS_REQUIRE_ADMIN` | `false` | 设为 `true` 后，AI JSON 生成及地址/上传提交需要管理员会话 |
+| `ADMIN_PASSWORD` | 空 | 启用独立的 `/admin` 后台，不能代替 GitHub 登录 |
+| `ANALYSIS_REQUIRE_ADMIN` | `false` | 已配置 `ADMIN_PASSWORD` 时，AI JSON 生成、地址/上传提交及重试还需管理员会话 |
 | `KOMA_CONFIG_SECRET` | `ADMIN_PASSWORD` | Provider 配置加密密钥，推荐单独设置 |
 | `DB_DRIVER` | `sqlite` | `sqlite` 或 `mysql` |
 | `KOMA_DATABASE_PATH` | `./data/koma.sqlite` | SQLite 文件路径 |
@@ -171,10 +191,12 @@ VISION_MODEL=vision-model
 | `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | 空 | 仅服务端使用的 OSS 凭证 |
 | `OSS_BUCKET` | 空 | OSS Bucket |
 | `OSS_UPLOAD_PREFIX` | `koma` | 独立命名空间；任务位于 `koma/jobs/<id>/` |
-| `OSS_PUBLIC_BASE_URL` | 空 | 可选的可信公开/CDN 地址；为空时使用签名 URL |
+| `OSS_PUBLIC_BASE_URL` | 空 | 私有工作区应留空；任务下载忽略此覆盖，使用签名 URL |
 | `OSS_SIGNED_URL_SECONDS` | `900` | 签名回看地址有效期，最多一小时 |
 
-公开任务链接永久有效；仅拿到链接的访问者只能读取。提交任务的浏览器可通过 HttpOnly 匿名身份查看和删除自己的任务，`/admin` 可以管理全部任务。永久删除会移除任务及其整个存储目录。
+新任务归属于登录的 GitHub 账号。回看、视频、关键帧和产物文件都需要该账号或管理员身份，仅有回看地址不能访问。未认领的旧链接保留原来的只读访问方式，直到原浏览器所有者明确认领。详见[迁移规则](ADMIN.zh-CN.md#旧任务与迁移)。永久删除会移除任务及其整个存储目录。
+
+Koma 对新 OSS 对象显式设置私有 ACL，认领旧任务前也会先将整个任务前缀设为私有；共享 Bucket 权限保持不变。`OSS_PUBLIC_BASE_URL` 应留空；即使配置了该覆盖，任务下载仍然先校验权限，再使用签名 URL。拿到签名地址的人在有效期内仍可使用它。认领不能收回此前下载或缓存的公开内容，独立配置的公开 CDN 也不能绕过源站对象权限。
 
 ## 处理流程
 

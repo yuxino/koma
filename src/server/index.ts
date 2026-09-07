@@ -26,19 +26,31 @@ import {
   isAdminSession,
   revokeAdminSession
 } from "./auth/admin-auth.js";
-import { databaseDriver, initializeDatabase, listJobHistory, listOwnedJobHistory, markInterruptedJobs, type JobHistoryRecord } from "./persistence/database.js";
+import { databaseDriver, initializeDatabase, listJobHistory, claimLegacyJobs, listAccountJobHistory, listLegacyJobHistory, readJobAccount, readJobSource, markInterruptedJobs, type JobHistoryRecord } from "./persistence/database.js";
 import { getRuntimeProviders, getSafeProviderSettings, initializeProviderSettings, resetProviderSettings, updateProviderSettings } from "./analysis/provider-runtime.js";
-import { initializeStorage, storageHealth, storedObjectInfo } from "./persistence/storage.js";
-import { readViewerOwnerId, resolveViewerIdentity, viewerSessionCookie } from "./auth/viewer-session.js";
+import { copyStoredFile, makeStoredPrefixPrivate, initializeStorage, storageHealth, storedObjectInfo } from "./persistence/storage.js";
+import { readViewerOwnerId } from "./auth/viewer-session.js";
+
+import { beginGithubLogin, clearAccountCookie, clearGithubLoginCookie, completeGithubLogin, currentAccount, githubAuthEnabled, revokeAccountSession } from "./auth/github-auth.js";
 
 await initializeDatabase();
 await markInterruptedJobs();
 await initializeStorage();
 await initializeProviderSettings();
 
-const app = Fastify({ logger: true, bodyLimit: 64 * 1024, trustProxy: config.trustProxy });
+const app = Fastify({
+  logger: {
+    serializers: { req: (request) => ({ method: request.method, url: String(request.url || "").split("?", 1)[0], hostname: request.hostname, remoteAddress: request.ip }) },
+    redact: ["req.headers.cookie", "req.headers.authorization", "res.headers.set-cookie"]
+  },
+  bodyLimit: 64 * 1024, trustProxy: config.trustProxy
+});
 const demoLimiter = createDailyLimiter(config.demoRequestsPerIpPerDay);
+const loginLimiter = createDailyLimiter(100);
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
+app.addHook("onRequest", async (request, reply) => {
+  if (request.url.startsWith("/api/")) reply.header("cache-control", "no-store");
+});
 
 app.get("/api/health", async () => {
   const providers = getRuntimeProviders();
@@ -52,8 +64,8 @@ app.get("/api/health", async () => {
     analysisProvider: providers.vision.provider,
     models: { asr: providers.asr.model || null, vision: providers.vision.model || null },
     limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds },
-    features: { customExtraction: true, analysisSpecGeneration: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, viewerHistory: true, viewerOwnedDeletion: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled(), analysisRequiresAdmin: analysisAuthRequired() },
-    configured: { asr: asrConfigured, vision: visionConfigured, analysis: visionConfigured },
+    features: { githubLogin: true, privateWorkspace: true, legacyClaim: true, jobRetry: true, customExtraction: true, analysisSpecGeneration: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, viewerHistory: true, viewerOwnedDeletion: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled(), analysisRequiresAdmin: analysisAuthRequired() },
+    configured: { github: githubAuthEnabled(), asr: asrConfigured, vision: visionConfigured, analysis: visionConfigured },
     database: { driver: databaseDriver() },
     storage: storageHealth(),
     demoLimitPerIpPerDay: config.demoRequestsPerIpPerDay || null,
@@ -91,6 +103,36 @@ app.post("/api/analysis-spec/generate", { bodyLimit: 16 * 1024, onRequest: requi
     request.raw.off("aborted", abortGeneration);
     reply.raw.off("close", abortOnClosedResponse);
   }
+});
+
+app.get("/api/auth/session", async (request, reply) => {
+  const user = await currentAccount(request.headers.cookie);
+  const legacyOwner = user && readViewerOwnerId(request.headers.cookie);
+  const legacyJobCount = legacyOwner ? (await listLegacyJobHistory(legacyOwner)).length : 0;
+  return reply.header("cache-control", "no-store").send({ enabled: githubAuthEnabled(), authenticated: Boolean(user), user, legacyJobCount });
+});
+
+app.get("/api/auth/github", async (request, reply) => {
+  const limit = loginLimiter.consume(request.ip);
+  if (!limit.allowed) return reply.header("cache-control", "no-store").header("retry-after", Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000))).code(429).send({ error: "登录尝试过多，请稍后再试。" });
+  const login = await beginGithubLogin((request.query as { returnTo?: unknown }).returnTo, isSecureRequest(request));
+  reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer");
+  if (!login) return reply.redirect("/?auth=unavailable");
+  return reply.header("set-cookie", login.cookie).redirect(login.url);
+});
+
+app.get("/api/auth/github/callback", async (request, reply) => {
+  const secure = isSecureRequest(request);
+  const result = await completeGithubLogin(request.query as { state?: unknown; code?: unknown; error?: unknown }, request.headers.cookie, secure);
+  reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer");
+  reply.header("set-cookie", result.ok ? [clearGithubLoginCookie(secure), result.cookie] : clearGithubLoginCookie(secure));
+  return reply.redirect(result.ok ? result.returnTo : `/?auth=${result.reason}`);
+});
+
+app.delete("/api/auth/session", async (request, reply) => {
+  if (!viewerMutationHeader(request)) return reply.code(403).send({ error: "用户请求校验失败。" });
+  await revokeAccountSession(request.headers.cookie);
+  return reply.header("cache-control", "no-store").header("set-cookie", clearAccountCookie(isSecureRequest(request))).code(204).send();
 });
 
 app.get("/api/admin/session", async (request, reply) => {
@@ -157,19 +199,68 @@ app.delete("/api/admin/jobs/:id", async (request: FastifyRequest<{ Params: { id:
 });
 
 app.get("/api/my/jobs", async (request, reply) => {
-  const ownerId = ensureViewerIdentity(request, reply);
-  const jobs = (await listOwnedJobHistory(ownerId, 100)).map(publicHistoryRecord);
+  const user = await requireAccount(request, reply);
+  if (!user) return;
+  const jobs = await Promise.all((await listAccountJobHistory(user.id, 200)).map(accountHistoryRecord));
   return reply.header("cache-control", "no-store").send({ jobs });
+});
+
+app.get("/api/my/jobs/legacy", async (request, reply) => {
+  if (!await requireAccount(request, reply)) return;
+  const ownerId = readViewerOwnerId(request.headers.cookie);
+  const jobs = ownerId ? (await listLegacyJobHistory(ownerId)).map(publicHistoryRecord) : [];
+  return reply.header("cache-control", "no-store").send({ jobs });
+});
+
+app.post("/api/my/jobs/claim", async (request, reply) => {
+  if (!viewerMutationHeader(request)) return reply.code(403).send({ error: "用户请求校验失败。" });
+  const user = await requireAccount(request, reply);
+  if (!user) return;
+  const ownerId = readViewerOwnerId(request.headers.cookie);
+  if (ownerId) {
+    try {
+      for (const job of await listLegacyJobHistory(ownerId)) await makeStoredPrefixPrivate(job.storagePrefix);
+    } catch {
+      return reply.code(503).send({ error: "暂时无法保护旧任务的文件，尚未迁移，请稍后重试。" });
+    }
+  }
+  const claimed = ownerId ? await claimLegacyJobs(ownerId, user.id) : 0;
+  return reply.header("cache-control", "no-store").send({ claimed });
 });
 
 app.delete("/api/my/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
   if (!viewerMutationHeader(request)) return reply.code(403).send({ error: "用户请求校验失败。" });
-  const ownerId = readViewerOwnerId(request.headers.cookie);
-  if (!ownerId) return reply.code(404).send({ error: "找不到这次分析。" });
-  const job = await loadJob(request.params.id);
-  if (!job || job.ownerId !== ownerId) return reply.code(404).send({ error: "找不到这次分析。" });
-  await deleteJob(job.id);
+  const user = await requireAccount(request, reply);
+  if (!user) return;
+  if (await readJobAccount(request.params.id) !== user.id) return reply.code(404).send({ error: "找不到这次分析。" });
+  await deleteJob(request.params.id);
   return reply.code(204).send();
+});
+
+app.post<{ Params: { id: string } }>("/api/my/jobs/:id/retry", { onRequest: requireAnalysisAccess }, async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+  const user = await currentAccount(request.headers.cookie);
+  if (!user || await readJobAccount(request.params.id) !== user.id) return reply.code(404).send({ error: "找不到这次分析。" });
+  const previous = await loadJob(request.params.id);
+  if (!previous) return reply.code(404).send({ error: "找不到这次分析。" });
+  if (previous.status !== "failed") return reply.code(409).send({ error: "只有失败的任务可以重试。" });
+  if (!await canRetryJob(previous)) return reply.code(409).send({ error: "原视频已不可用，请重新上传或粘贴视频链接。" });
+  if (!acceptDemoRequest(request, reply)) return;
+  let next: Job | undefined;
+  try {
+    next = await createJob({ source: previous.source, title: previous.title, language: previous.language, analysisSpec: previous.analysisSpec, accountId: user.id, sourceUrl: previous.sourceUrl });
+    if (previous.inputObjectKey && previous.mediaAvailable) {
+      next.inputPath = join(next.dir, `input${extensionFor(previous.inputObjectKey)}`);
+      next.inputMimeType = previous.inputMimeType;
+      await copyStoredFile(previous.inputObjectKey, next.inputPath);
+      // Already retained media takes priority over re-fetching an expiring link.
+      next.sourceUrl = undefined;
+    }
+    enqueueAnalysis(next);
+    return reply.header("cache-control", "no-store").code(202).send({ jobId: next.id });
+  } catch {
+    if (next) await deleteJob(next.id);
+    return reply.code(409).send({ error: "暂时无法读取原视频，请重新上传或粘贴视频链接。" });
+  }
 });
 
 app.post("/api/analyze/upload", { onRequest: requireAnalysisAccess }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -185,8 +276,10 @@ app.post("/api/analyze/upload", { onRequest: requireAnalysisAccess }, async (req
     });
     if (!acceptDemoRequest(request, reply)) return;
     const language = requestLanguage((request.query as { lang?: string } | undefined)?.lang);
-    const ownerId = ensureViewerIdentity(request, reply);
-    job = await createJob({ source: "upload", title: part.filename, language, analysisSpec, ownerId });
+    const user = await requireAccount(request, reply);
+    if (!user) return;
+    const accountId = user.id;
+    job = await createJob({ source: "upload", title: part.filename, language, analysisSpec, accountId });
     const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
     job.inputPath = inputPath;
     job.inputMimeType = part.mimetype;
@@ -209,8 +302,10 @@ app.post("/api/analyze/url", { onRequest: requireAnalysisAccess }, async (reques
     validateVideoUrl(url);
     const analysisSpec = parseAnalysisSpec({ instruction: body?.instruction, outputSchema: body?.outputSchema, artifactFormats: body?.artifactFormats });
     if (!acceptDemoRequest(request, reply)) return;
-    const ownerId = ensureViewerIdentity(request, reply);
-    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang), analysisSpec, ownerId });
+    const user = await requireAccount(request, reply);
+    if (!user) return;
+    const accountId = user.id;
+    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang), analysisSpec, accountId, sourceUrl: url });
     job.sourceUrl = url;
     updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
     enqueueAnalysis(job);
@@ -224,12 +319,14 @@ app.post("/api/analyze/url", { onRequest: requireAnalysisAccess }, async (reques
 app.get("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
   const job = await loadJob(request.params.id);
   if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
-  const ownerId = readViewerOwnerId(request.headers.cookie);
-  return reply.header("cache-control", "no-store").send({ ...serializeJob(job), owned: Boolean(ownerId && job.ownerId === ownerId) });
+  const access = await canAccessJob(request, job.id);
+  if (!access.allowed) return reply.code(404).send({ error: "找不到这次分析。" });
+  return reply.header("cache-control", "no-store").send({ ...serializeJob(job), owned: access.owned, visibility: access.private ? "private" : "legacy-link", retryable: access.owned && await canRetryJob(job) });
 });
 
 // Programmatic callers can fetch exactly the requested JSON value without Koma's summary wrapper.
 app.get("/api/jobs/:id/extraction", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  if (!(await canAccessJob(request, request.params.id)).allowed) return reply.code(404).send({ error: "找不到这次分析。" });
   const job = await loadJob(request.params.id);
   if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
   if (job.status !== "done" || !job.result) return reply.code(409).send({ error: "结构化提取还没有完成。" });
@@ -240,6 +337,7 @@ app.get("/api/jobs/:id/extraction", async (request: FastifyRequest<{ Params: { i
 });
 
 app.get("/api/jobs/:id/artifacts/:artifactId", async (request: FastifyRequest<{ Params: { id: string; artifactId: string } }>, reply: FastifyReply) => {
+  if (!(await canAccessJob(request, request.params.id)).allowed) return reply.code(404).send({ error: "找不到这次分析。" });
   const job = await loadJob(request.params.id);
   if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
   if (job.status !== "done" || !job.result) return reply.code(409).send({ error: "产物文件还没有生成完成。" });
@@ -249,10 +347,11 @@ app.get("/api/jobs/:id/artifacts/:artifactId", async (request: FastifyRequest<{ 
 });
 
 app.delete("/api/jobs/:id", async (_request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  return reply.code(405).header("allow", "GET").send({ error: "公开回看链接不能直接删除任务，请从“我的任务”删除自己提交的内容。" });
+  return reply.code(405).header("allow", "GET").send({ error: "回看页面不能直接删除任务，请从资料库或管理后台删除。" });
 });
 
 app.get("/api/jobs/:id/frames/:filename", async (request: FastifyRequest<{ Params: { id: string; filename: string } }>, reply: FastifyReply) => {
+  if (!(await canAccessJob(request, request.params.id)).allowed) return reply.code(404).send({ error: "找不到这次分析。" });
   const job = await loadJob(request.params.id);
   if (!job || !job.result) return reply.code(404).send({ error: "找不到这张关键帧。" });
   const filename = basename(request.params.filename);
@@ -277,6 +376,7 @@ app.get("/api/temp/:token", async (request: FastifyRequest<{ Params: { token: st
 });
 
 app.get("/api/jobs/:id/video", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  if (!(await canAccessJob(request, request.params.id)).allowed) return reply.code(404).send({ error: "找不到这次分析。" });
   const job = await loadJob(request.params.id);
   if (!job?.inputObjectKey || !job.mediaAvailable) return reply.code(404).send({ error: "找不到这段视频。" });
   return sendStoredObject(request, reply, job.inputObjectKey, normalizeVideoContentType(job.inputMimeType));
@@ -284,14 +384,14 @@ app.get("/api/jobs/:id/video", async (request: FastifyRequest<{ Params: { id: st
 
 async function sendStoredObject(request: FastifyRequest, reply: FastifyReply, key: string, mimeType: string, disposition?: string) {
   try {
-    const object = await storedObjectInfo(key);
+    const object = await storedObjectInfo(key, { private: true });
     if ("url" in object) {
       return reply.header("cache-control", "no-store").redirect(object.url);
     }
     const rangeHeader = request.headers.range;
     const range = rangeHeader ? parseByteRange(rangeHeader, object.size) : null;
     if (rangeHeader && !range) return reply.code(416).header("content-range", `bytes */${object.size}`).send();
-    reply.header("accept-ranges", "bytes").header("cache-control", "private, max-age=3600").type(mimeType);
+    reply.header("accept-ranges", "bytes").header("cache-control", "private, no-store").type(mimeType);
     if (disposition) reply.header("content-disposition", disposition);
     if (!range) return reply.header("content-length", object.size).send(createReadStream(object.path));
     return reply
@@ -331,16 +431,38 @@ function requireAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
 }
 
 async function requireAnalysisAccess(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  if (!analysisAuthRequired()) return;
-  if (!adminMutationHeader(request)) {
-    reply.code(403).send({ error: "管理请求校验失败。" });
+  if (!viewerMutationHeader(request)) {
+    reply.code(403).send({ error: "用户请求校验失败。" });
     return;
   }
-  if (isAdminSession(request.headers.cookie)) return;
-  reply
-    .header("cache-control", "no-store")
-    .code(401)
-    .send({ error: "请先登录管理后台，再开始生成或分析。" });
+  if (!await requireAccount(request, reply)) return;
+  if (analysisAuthRequired() && !isAdminSession(request.headers.cookie)) {
+    reply.header("cache-control", "no-store").code(403).send({ error: "当前服务仅允许管理员开始分析。" });
+  }
+}
+
+async function requireAccount(request: FastifyRequest, reply: FastifyReply) {
+  const user = await currentAccount(request.headers.cookie);
+  if (!user) reply.header("cache-control", "no-store").code(401).send({ error: "请先使用 GitHub 登录，再继续操作。" });
+  return user;
+}
+
+async function canAccessJob(request: FastifyRequest, jobId: string) {
+  const accountId = await readJobAccount(jobId);
+  const user = await currentAccount(request.headers.cookie);
+  const owned = Boolean(accountId && user?.id === accountId);
+  return { private: Boolean(accountId), owned, allowed: !accountId || owned || isAdminSession(request.headers.cookie) };
+}
+
+async function canRetryJob(job: Job): Promise<boolean> {
+  if (job.status !== "failed") return false;
+  job.sourceUrl ||= await readJobSource(job.id) || undefined;
+  return Boolean(job.sourceUrl || (job.inputObjectKey && job.mediaAvailable));
+}
+
+async function accountHistoryRecord(record: JobHistoryRecord) {
+  const job = await loadJob(record.id);
+  return { ...publicHistoryRecord(record), retryable: Boolean(job && await canRetryJob(job)), summary: job?.result?.summary || null, durationMs: job?.result?.durationMs || null };
 }
 
 function requireAdminMutation(request: FastifyRequest, reply: FastifyReply): boolean {
@@ -356,18 +478,18 @@ function adminMutationHeader(request: FastifyRequest): boolean {
 }
 
 function viewerMutationHeader(request: FastifyRequest): boolean {
-  return request.headers["x-koma-user"] === "1";
-}
-
-function ensureViewerIdentity(request: FastifyRequest, reply: FastifyReply): string {
-  const identity = resolveViewerIdentity(request.headers.cookie);
-  if (identity.created) reply.header("set-cookie", viewerSessionCookie(identity.token, isSecureRequest(request)));
-  return identity.ownerId;
+  if (request.headers["x-koma-client"] !== "1" && request.headers["x-koma-user"] !== "1") return false;
+  if (request.headers["sec-fetch-site"] === "cross-site") return false;
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  try {
+    const expected = new URL(process.env.GITHUB_CALLBACK_URL || config.publicBaseUrl).origin;
+    return new URL(origin).origin === expected;
+  } catch { return false; }
 }
 
 function isSecureRequest(request: FastifyRequest): boolean {
-  const forwardedProtocol = String(request.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim().toLowerCase();
-  return request.protocol === "https" || forwardedProtocol === "https" || config.publicBaseUrl.startsWith("https://");
+  return request.protocol === "https" || (process.env.GITHUB_CALLBACK_URL || config.publicBaseUrl).startsWith("https://");
 }
 
 function publicHistoryRecord(job: JobHistoryRecord) {

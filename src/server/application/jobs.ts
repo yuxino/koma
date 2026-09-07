@@ -5,7 +5,7 @@ import { config, type AsrProvider, type VisionProvider } from "../config/config.
 import type { TranscriptLine } from "../shared/types.js";
 import type { AnalysisSpec } from "../analysis/analysis-spec.js";
 import type { Artifact } from "../persistence/artifacts.js";
-import { deleteJobRecord, readJobOwner, readJobRecord, writeJobOwner, writeJobRecord, type PersistedJobRecord } from "../persistence/database.js";
+import { deleteJobRecord, readJobAccount, readJobSource, readJobOwner, readJobRecord, writeJobAccount, writeJobSource, writeJobOwner, writeJobRecord, type PersistedJobRecord } from "../persistence/database.js";
 import { getRuntimeProviders, type RuntimeProviders } from "../analysis/provider-runtime.js";
 import { deleteStoredPrefix, jobStoragePrefix } from "../persistence/storage.js";
 export type { TranscriptLine };
@@ -74,13 +74,14 @@ export interface Job {
   analysisSpec: AnalysisSpec;
   providers: RuntimeProviders;
   ownerId?: string;
+  accountId?: string;
 }
 
 const jobs = new Map<string, Job>();
 const abortControllers = new Map<string, AbortController>();
 const persistenceQueues = new Map<string, Promise<void>>();
 
-export async function createJob({ source, title, language = "zh", analysisSpec = {}, providers = getRuntimeProviders(), ownerId }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec; providers?: RuntimeProviders; ownerId?: string }): Promise<Job> {
+export async function createJob({ source, title, language = "zh", analysisSpec = {}, providers = getRuntimeProviders(), ownerId, accountId, sourceUrl }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec; providers?: RuntimeProviders; ownerId?: string; accountId?: string; sourceUrl?: string }): Promise<Job> {
   const id = randomUUID();
   const dir = join(config.tempRoot, `koma-${id}`);
   await mkdir(dir, { recursive: true });
@@ -102,13 +103,17 @@ export async function createJob({ source, title, language = "zh", analysisSpec =
     language,
     analysisSpec,
     providers,
-    ownerId
+    ownerId,
+    accountId,
+    sourceUrl
   };
   jobs.set(id, job);
   abortControllers.set(id, new AbortController());
   try {
     await writeJobRecord(toPersistedRecord(job));
     if (ownerId) await writeJobOwner(id, ownerId, now);
+    if (accountId) await writeJobAccount(id, accountId);
+    if (sourceUrl) await writeJobSource(id, sourceUrl);
   } catch (error) {
     jobs.delete(id);
     abortControllers.delete(id);
@@ -133,6 +138,8 @@ export async function loadJob(id: string): Promise<Job | undefined> {
   const record = await readJobRecord(id);
   if (!record) return undefined;
   const job = fromPersistedRecord(record, await readJobOwner(id));
+  job.accountId = await readJobAccount(id) || undefined;
+  job.sourceUrl = await readJobSource(id) || undefined;
   jobs.set(id, job);
   return job;
 }

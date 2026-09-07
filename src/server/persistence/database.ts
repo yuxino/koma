@@ -322,6 +322,7 @@ async function initializeSelectedDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS koma_job_owners_owner_created_idx ON koma_job_owners(owner_hash, created_at DESC);
     `);
   }
+  await initializeAccountTables();
 }
 
 function jobValues(record: PersistedJobRecord): Array<string | number | null> {
@@ -406,4 +407,123 @@ function booleanEnv(value: string | undefined, fallback: boolean): boolean {
   if (["1", "true", "on", "yes"].includes(normalized)) return true;
   if (["0", "false", "off", "no"].includes(normalized)) return false;
   return fallback;
+}
+
+export interface AccountUser {
+  id: string;
+  login: string;
+  name: string | null;
+  avatarUrl: string;
+}
+
+export interface OAuthAttempt {
+  stateHash: string;
+  browserHash: string;
+  verifier: string;
+  returnTo: string;
+  expiresAt: number;
+}
+
+export async function saveAccount(user: AccountUser, now = Date.now()): Promise<void> {
+  const values = [user.id, user.login, user.name, user.avatarUrl, now];
+  await executeDatabase(databaseDriver() === "mysql"
+    ? "INSERT INTO koma_accounts (id, login, name, avatar_url, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE login = VALUES(login), name = VALUES(name), avatar_url = VALUES(avatar_url), updated_at = VALUES(updated_at)"
+    : "INSERT INTO koma_accounts (id, login, name, avatar_url, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET login = excluded.login, name = excluded.name, avatar_url = excluded.avatar_url, updated_at = excluded.updated_at", values);
+}
+
+export async function saveAccountSession(tokenHash: string, accountId: string, expiresAt: number): Promise<void> {
+  await executeDatabase("DELETE FROM koma_account_sessions WHERE expires_at <= ?", [Date.now()]);
+  await executeDatabase("INSERT INTO koma_account_sessions (token_hash, account_id, expires_at) VALUES (?, ?, ?)", [tokenHash, accountId, expiresAt]);
+}
+
+export async function readAccountSession(tokenHash: string, now = Date.now()): Promise<AccountUser | null> {
+  const [row] = await queryDatabase("SELECT a.id, a.login, a.name, a.avatar_url FROM koma_account_sessions s INNER JOIN koma_accounts a ON a.id = s.account_id WHERE s.token_hash = ? AND s.expires_at > ?", [tokenHash, now]);
+  return row ? { id: String(row.id), login: String(row.login), name: row.name == null ? null : String(row.name), avatarUrl: String(row.avatar_url) } : null;
+}
+
+export async function deleteAccountSession(tokenHash: string): Promise<void> {
+  await executeDatabase("DELETE FROM koma_account_sessions WHERE token_hash = ?", [tokenHash]);
+}
+
+export async function saveOAuthAttempt(attempt: OAuthAttempt, now = Date.now()): Promise<void> {
+  await executeDatabase("DELETE FROM koma_oauth_attempts WHERE expires_at <= ?", [now]);
+  await executeDatabase("INSERT INTO koma_oauth_attempts (state_hash, browser_hash, verifier, return_to, expires_at) VALUES (?, ?, ?, ?, ?)", [attempt.stateHash, attempt.browserHash, attempt.verifier, attempt.returnTo, attempt.expiresAt]);
+}
+
+export async function consumeOAuthAttempt(stateHash: string, browserHash: string, now = Date.now()): Promise<OAuthAttempt | null> {
+  const values = [stateHash, browserHash, now];
+  const [row] = await queryDatabase("SELECT * FROM koma_oauth_attempts WHERE state_hash = ? AND browser_hash = ? AND expires_at > ?", values);
+  if (!row) return null;
+  // The conditional delete is atomic on both database drivers; only one callback wins.
+  const deleted = await executeDatabase("DELETE FROM koma_oauth_attempts WHERE state_hash = ? AND browser_hash = ? AND expires_at > ?", values);
+  return deleted === 1 ? { stateHash, browserHash, verifier: String(row.verifier), returnTo: String(row.return_to), expiresAt: Number(row.expires_at) } : null;
+}
+
+export async function writeJobAccount(jobId: string, accountId: string): Promise<void> {
+  await executeDatabase("INSERT INTO koma_job_accounts (job_id, account_id) VALUES (?, ?)", [jobId, accountId]);
+}
+
+export async function readJobAccount(jobId: string): Promise<string | null> {
+  const [row] = await queryDatabase("SELECT account_id FROM koma_job_accounts WHERE job_id = ?", [jobId]);
+  return row ? String(row.account_id) : null;
+}
+
+export async function listAccountJobHistory(accountId: string, limit = 200): Promise<JobHistoryRecord[]> {
+  const rows = await queryDatabase(`SELECT ${HISTORY_COLUMNS.map((column) => `j.${column}`).join(", ")} FROM koma_jobs j INNER JOIN koma_job_accounts a ON a.job_id = j.id WHERE a.account_id = ? ORDER BY j.created_at DESC LIMIT ?`, [accountId, Math.min(200, Math.max(1, Math.floor(limit)))]);
+  return rows.map(historyFromRow);
+}
+
+export async function listLegacyJobHistory(ownerId: string): Promise<JobHistoryRecord[]> {
+  if (!/^[a-f0-9]{64}$/.test(ownerId)) return [];
+  const rows = await queryDatabase(`SELECT ${HISTORY_COLUMNS.map((column) => `j.${column}`).join(", ")} FROM koma_jobs j INNER JOIN koma_job_owners o ON o.job_id = j.id LEFT JOIN koma_job_accounts a ON a.job_id = j.id WHERE o.owner_hash = ? AND a.job_id IS NULL ORDER BY j.created_at DESC`, [ownerId]);
+  return rows.map(historyFromRow);
+}
+
+export async function claimLegacyJobs(ownerId: string, accountId: string): Promise<number> {
+  if (!/^[a-f0-9]{64}$/.test(ownerId)) return 0;
+  // New account ownership is immutable. A concurrent claim cannot overwrite it.
+  return executeDatabase(`${databaseDriver() === "mysql" ? "INSERT IGNORE" : "INSERT OR IGNORE"} INTO koma_job_accounts (job_id, account_id) SELECT o.job_id, ? FROM koma_job_owners o INNER JOIN koma_jobs j ON j.id = o.job_id WHERE o.owner_hash = ?`, [accountId, ownerId]);
+}
+
+export async function writeJobSource(jobId: string, sourceUrl: string): Promise<void> {
+  await executeDatabase("INSERT INTO koma_job_sources (job_id, source_url) VALUES (?, ?)", [jobId, sourceUrl]);
+}
+
+export async function readJobSource(jobId: string): Promise<string | null> {
+  const [row] = await queryDatabase("SELECT source_url FROM koma_job_sources WHERE job_id = ?", [jobId]);
+  return row ? String(row.source_url) : null;
+}
+
+async function queryDatabase(sql: string, values: Array<string | number | null>): Promise<Array<Record<string, unknown>>> {
+  await initializeDatabase();
+  return databaseDriver() === "mysql"
+    ? (await mysqlPool!.query<RowDataPacket[]>(sql, values))[0] as Array<Record<string, unknown>>
+    : sqliteDatabase!.prepare(sql).all(...values) as Array<Record<string, unknown>>;
+}
+
+async function executeDatabase(sql: string, values: Array<string | number | null>): Promise<number> {
+  await initializeDatabase();
+  if (databaseDriver() === "mysql") {
+    const [result] = await mysqlPool!.execute<mysql.ResultSetHeader>(sql, values);
+    return result.affectedRows;
+  }
+  return Number(sqliteDatabase!.prepare(sql).run(...values).changes);
+}
+
+async function initializeAccountTables(): Promise<void> {
+  const mysqlDriver = databaseDriver() === "mysql";
+  const text = mysqlDriver ? "VARCHAR(200)" : "TEXT";
+  const id = mysqlDriver ? "VARCHAR(64)" : "TEXT";
+  const integer = mysqlDriver ? "BIGINT" : "INTEGER";
+  const tables = [
+    `CREATE TABLE IF NOT EXISTS koma_accounts (id ${id} PRIMARY KEY, login ${text} NOT NULL, name ${text}, avatar_url ${mysqlDriver ? "VARCHAR(1000)" : "TEXT"} NOT NULL, updated_at ${integer} NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS koma_account_sessions (token_hash ${id} PRIMARY KEY, account_id ${id} NOT NULL, expires_at ${integer} NOT NULL, FOREIGN KEY(account_id) REFERENCES koma_accounts(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS koma_oauth_attempts (state_hash ${id} PRIMARY KEY, browser_hash ${id} NOT NULL, verifier ${text} NOT NULL, return_to ${mysqlDriver ? "VARCHAR(2000)" : "TEXT"} NOT NULL, expires_at ${integer} NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS koma_job_accounts (job_id ${id} PRIMARY KEY, account_id ${id} NOT NULL, FOREIGN KEY(job_id) REFERENCES koma_jobs(id) ON DELETE CASCADE, FOREIGN KEY(account_id) REFERENCES koma_accounts(id))`,
+    `CREATE TABLE IF NOT EXISTS koma_job_sources (job_id ${id} PRIMARY KEY, source_url ${mysqlDriver ? "TEXT" : "TEXT"} NOT NULL, FOREIGN KEY(job_id) REFERENCES koma_jobs(id) ON DELETE CASCADE)`
+  ];
+  for (const sql of tables) {
+    if (mysqlDriver) await mysqlPool!.query(`${sql} ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    else sqliteDatabase!.exec(sql);
+  }
 }

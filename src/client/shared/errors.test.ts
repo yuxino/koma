@@ -29,6 +29,12 @@ describe("translateServerError", () => {
     expect(translateServerError("说话人分离需要配置 PUBLIC_BASE_URL（服务的公网地址）。", "en")).toContain("PUBLIC_BASE_URL");
   });
 
+  it("explains account, migration, and recoverable-source errors", () => {
+    expect(translateServerError("请先使用 GitHub 登录，再继续操作。", "en")).toBe("Sign in with GitHub to continue.");
+    expect(translateServerError("暂时无法保护旧任务的文件，尚未迁移，请稍后重试。", "en")).toContain("No jobs were moved");
+    expect(translateServerError("原视频已不可用，请重新上传或粘贴视频链接。", "en")).toContain("Upload it again");
+  });
+
   it("falls back to a generic English message for unknown errors", () => {
     expect(translateServerError("某种未收录的错误", "en")).toBe("Something went wrong. Please try again.");
   });

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -19,6 +21,10 @@ beforeAll(async () => {
     env: {
       ...process.env,
       PORT: String(port),
+      GITHUB_CLIENT_ID: "",
+      GITHUB_CLIENT_SECRET: "",
+      GITHUB_CALLBACK_URL: "",
+      PUBLIC_BASE_URL: baseUrl,
       TEMP_ROOT: join(root, "tmp"),
       DB_DRIVER: "sqlite",
       KOMA_DATABASE_PATH: join(root, "koma.sqlite"),
@@ -35,6 +41,10 @@ beforeAll(async () => {
   child.stdout.on("data", (chunk) => { serverOutput += chunk.toString(); });
   child.stderr.on("data", (chunk) => { serverOutput += chunk.toString(); });
   await waitForHealth();
+  const database = new DatabaseSync(join(root, "koma.sqlite"));
+  database.prepare("INSERT INTO koma_accounts VALUES (?, ?, ?, ?, ?)").run("1", "test-user", null, "https://avatars.githubusercontent.com/u/1", Date.now());
+  database.prepare("INSERT INTO koma_account_sessions VALUES (?, ?, ?)").run(createHash("sha256").update("t".repeat(43)).digest("hex"), "1", Date.now() + 3600000);
+  database.close();
 }, 15_000);
 
 afterAll(async () => {
@@ -52,7 +62,7 @@ describe("HTTP body limits", () => {
   it("rejects oversized JSON before parsing it", async () => {
     const response = await fetch(`${baseUrl}/api/analyze/url`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-koma-client": "1", cookie: `koma_session=${"t".repeat(43)}` },
       body: JSON.stringify({ url: "https://example.com/video.mp4", padding: "x".repeat(70 * 1024) })
     });
 
@@ -63,7 +73,7 @@ describe("HTTP body limits", () => {
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(70 * 1024)], { type: "video/mp4" }), "upload.mp4");
 
-    const response = await fetch(`${baseUrl}/api/analyze/upload`, { method: "POST", body: form });
+    const response = await fetch(`${baseUrl}/api/analyze/upload`, { method: "POST", headers: { "x-koma-client": "1", cookie: `koma_session=${"t".repeat(43)}` }, body: form });
     expect(response.status).toBe(202);
     const body = await response.json() as { jobId?: string };
     expect(body.jobId).toMatch(/^[a-f0-9-]{36}$/);
@@ -101,7 +111,7 @@ async function waitForHealth(): Promise<void> {
 
 async function waitForTerminalJob(jobId: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const response = await fetch(`${baseUrl}/api/jobs/${jobId}`);
+    const response = await fetch(`${baseUrl}/api/jobs/${jobId}`, { headers: { cookie: `koma_session=${"t".repeat(43)}` } });
     const body = await response.json() as { status?: string };
     if (body.status === "done" || body.status === "failed") return;
     await delay(50);

@@ -17,10 +17,17 @@ import { translateServerError } from "../../shared/errors.js";
 import { formatTime } from "../../shared/format.js";
 import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
 import { progressStepStates } from "../../shared/progress.js";
+import { WelcomeScreen } from "./WelcomeScreen.js";
+import { Icon } from "../../shared/Icon.js";
+import { classifyMissingJobAccess, createWorkspaceRequestGuard, type AccessSession } from "./workspace-access.js";
+import { WorkspaceLibrary } from "./WorkspaceLibrary.js";
+import { useGithubSession } from "./github-session.js";
+import { downloadText, resultToMarkdown, transcriptMatches, transcriptToSrt } from "./workspace-utils.js";
 import "../../styles/atelier-public.css";
+import "../../styles/atelier-workspace.css";
 
 type Language = "en" | "zh";
-const analysisAccessHeaders = { "x-koma-admin": "1" };
+const analysisAccessHeaders = { "X-Koma-Client": "1" };
 
 type Stage = "queued" | "resolving" | "downloading" | "inspecting" | "extracting_frames" | "extracting_audio" | "transcribing" | "interpreting" | "done" | "failed" | string;
 
@@ -44,8 +51,8 @@ const copy = {
     admin: "Manage",
     history: "My jobs",
     historyTitle: "My analysis history",
-    historyText: "Jobs submitted from this browser. Open a result or permanently delete its video and files.",
-    historyEmpty: "No analyses have been submitted from this browser yet.",
+    historyText: "Your GitHub account keeps your video history available across browsers and devices.",
+    historyEmpty: "Your video library is empty.",
     historyLoading: "Loading your jobs…",
     openResult: "Open",
     deleteOwn: "Delete",
@@ -53,7 +60,7 @@ const copy = {
     confirmDeleteOwn: "Permanently delete this analysis, its video, key frames, and generated files? This cannot be undone.",
     deleteFailed: "Could not delete this analysis.",
     badge: "VIDEO INTELLIGENCE WORKSPACE",
-    hero: "Turn video into data you can use.",
+    hero: "Keep the moments. Make sense of the rest.",
     intro: "Give Koma a video. Get the moments, subtitles, summary, or specific information you actually need.",
     mascotCue: "Your frame editor is ready.",
     mascotCueText: "I watch the frames, listen to the audio, and arrange every useful finding on the timeline.",
@@ -147,7 +154,7 @@ const copy = {
     completed: "ANALYSIS COMPLETE",
     resultFallback: "What is worth remembering from this video?",
     restart: "Start over",
-    clear: "Copy replay link",
+    clear: "Copy private link",
     linkCopied: "Link copied",
     aiSummary: "AI SUMMARY",
     structuredData: "REQUESTED DATA",
@@ -192,17 +199,17 @@ const copy = {
     subtitlePanelText: "One line at a time. Click any subtitle to jump back to it.",
     playFrom: "Play from",
     noSpeech: "No usable speech was detected in this video.",
-    remaining: "Permanent replay · manage your own jobs from this browser",
+    remaining: "Saved in your workspace · private account access",
     close: "Close",
     aboutTitle: "How to use Koma",
     aboutText: "From a plain-language request to a replayable analysis and structured JSON.",
     aboutSteps: [
       { title: "1 · Describe the result", text: "Upload a local video or paste a public URL, then describe what you need. Quick additions can be combined, and AI can turn the full request into editable JSON." },
       { title: "2 · Review the result", text: "Koma combines audio and key frames into a summary, chapters, tags, subtitles, and structured data. Click any timestamp, subtitle, chapter, tag, or key frame to return to that moment." },
-      { title: "3 · Return from My jobs", text: "My jobs lists analyses submitted from this browser. You can reopen a running or completed job and permanently delete your own video, frames, result, and generated files." },
-      { title: "4 · Share or administer", text: "Anyone with an unguessable replay link can view the result but cannot delete it. Administrators use Manage to configure providers and encrypted keys, inspect every job's request and result, and perform global deletion." }
+      { title: "3 · Return from My jobs", text: "Your library belongs to your GitHub account. Search titles and summaries, reopen a running analysis, retry failed jobs when their source is available, or delete your own files." },
+      { title: "4 · Private records and administration", text: "New videos are private to your account; copied links require the same account. Older unclaimed replay links keep their previous access. Manage remains a separate administrator area for providers and global job management." }
     ],
-    aboutMuted: "Browser ownership is anonymous and stored in an HttpOnly cookie. Clearing site data or switching browsers/devices removes access to My jobs, but saved replay links still work. Jobs created before this feature remain admin-only.",
+    aboutMuted: "Sign in with GitHub to recover your library on another device. If this browser has older anonymous jobs, review and claim them in the library. Templates stay in this browser, separately for each account. Previously downloaded or cached public copies cannot be recalled.",
     gotIt: "Got it",
     language: "中文"
   },
@@ -225,8 +232,8 @@ const copy = {
     admin: "管理",
     history: "我的任务",
     historyTitle: "我的分析记录",
-    historyText: "显示这个浏览器提交的任务，可以回看结果，也可以永久删除视频和相关文件。",
-    historyEmpty: "这个浏览器还没有提交过分析任务。",
+    historyText: "使用 GitHub 账号保存和管理视频，换个浏览器也能继续。",
+    historyEmpty: "你的资料库还没有视频。",
     historyLoading: "正在读取任务记录…",
     openResult: "打开",
     deleteOwn: "删除",
@@ -234,8 +241,8 @@ const copy = {
     confirmDeleteOwn: "确定永久删除这次分析、原视频、关键帧和生成文件吗？删除后无法恢复。",
     deleteFailed: "没有成功删除这次分析。",
     badge: "视频理解与数据提取工作台",
-    hero: "把视频，变成可以使用的数据。",
-    intro: "给 Koma 一段视频，得到关键内容、字幕、总结，或者你真正需要的信息。",
+    hero: "看懂一段视频，留下有用的部分。",
+    intro: "课程、访谈、演示，或一段还没来得及看完的视频。让 Koma 整理重点，你随时回到原片。",
     mascotCue: "逐帧整理员已就位。",
     mascotCueText: "我会同时看画面、听声音，再把有用的内容按时间码整理好。",
     flowVideo: "视频",
@@ -328,7 +335,7 @@ const copy = {
     completed: "分析完成",
     resultFallback: "这段视频，留下了什么？",
     restart: "重新开始",
-    clear: "复制回看链接",
+    clear: "复制私人链接",
     linkCopied: "链接已复制",
     aiSummary: "AI 视频总结",
     structuredData: "按要求提取的数据",
@@ -373,17 +380,17 @@ const copy = {
     subtitlePanelText: "每句一行，点击直接跳回对应位置。",
     playFrom: "从",
     noSpeech: "这段视频没有识别到可用人声。",
-    remaining: "永久回看 · 可在这个浏览器管理自己的任务",
+    remaining: "保存在个人工作区 · 登录本人账号后可见",
     close: "关闭",
     aboutTitle: "如何使用 Koma",
     aboutText: "用一句话描述要求，得到可回看、可定位的分析结果和结构化 JSON。",
     aboutSteps: [
       { title: "1 · 说清楚想要什么", text: "上传本地视频或粘贴公开视频地址，再直接描述结果要包含什么。快速补充可以同时选择，也可以让 AI 先整理成可编辑的 JSON。" },
       { title: "2 · 查看分析结果", text: "Koma 会结合声音和关键帧生成总结、章节、标签、字幕与结构化数据。点击时间、字幕、章节、标签或关键帧，都能跳回视频对应位置。" },
-      { title: "3 · 从“我的任务”回来", text: "“我的任务”会列出这个浏览器提交的分析。可以重新打开执行中或已完成的任务，也可以永久删除自己的原视频、关键帧、结果和生成文件。" },
-      { title: "4 · 分享与管理", text: "拿到不可猜回看链接的人可以查看结果，但不能删除。管理员从“管理”进入后台，配置 Provider 和加密 Key，查看全部任务的要求与结果，并执行全局删除。" }
+      { title: "3 · 回到自己的资料库", text: "资料库跟随你的 GitHub 账号。可以搜索标题和摘要、重新打开任务、在来源可用时重试失败的分析，也可以删除自己的视频和文件。" },
+      { title: "4 · 私人记录与管理", text: "新视频仅本人账号可见，复制的链接也需要登录同一账号。未认领的旧版回看链接保留原有访问方式。“管理”仍是独立的管理员入口，用于配置模型和管理全部任务。" }
     ],
-    aboutMuted: "用户归属通过 HttpOnly 匿名 Cookie 保存在当前浏览器。清除网站数据或换浏览器、换设备后，“我的任务”不会同步，但保存的回看链接仍可使用；此功能上线前的旧任务只在管理后台显示。",
+    aboutMuted: "换个浏览器登录同一 GitHub 账号，就能继续查看资料库。如果当前浏览器有旧匿名任务，可以在资料库中查看并认领。分析模板按账号保存在当前浏览器；此前已下载或缓存的文件副本无法收回。",
     gotIt: "知道了",
     language: "EN"
   }
@@ -397,8 +404,8 @@ interface Tag { label: string; category: string; atMs: number; }
 type ArtifactFormat = "json" | "csv" | "markdown" | "srt" | "text";
 interface Artifact { id: string; name: string; format: ArtifactFormat; mimeType: string; language?: string; sizeBytes: number; downloadUrl: string; }
 interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; extractedData?: unknown; artifacts?: Artifact[]; }
-interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; updatedAt: number; completedAt?: number | null; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; owned?: boolean; }
-interface JobHistoryItem { id: string; source: "upload" | "url"; title: string; status: Job["status"]; progress: JobProgress; createdAt: number; updatedAt: number; completedAt?: number | null; mediaAvailable: boolean; error: string | null; }
+interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; updatedAt: number; completedAt?: number | null; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; owned?: boolean; visibility?: "private" | "legacy-link"; retryable?: boolean; }
+
 interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number }; configured?: { vision?: boolean; analysis?: boolean }; }
 interface AnalysisSuggestion { id: AnalysisSuggestionId; label: string; description: string; instruction: string; }
 
@@ -505,14 +512,18 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
 
 function Brand({ onClick, label }: { onClick?: () => void; label?: string }) {
   return onClick
-    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><img src="/koma-icon-64.png" alt="" className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>FRAME ATELIER</span></span></button>
-    : <div className="brand-lockup"><img src="/koma-icon-64.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>FRAME ATELIER</span></div></div>;
+    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><img src="/koma-note-girl.png" alt="" className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>FRAME ATELIER</span></span></button>
+    : <div className="brand-lockup"><img src="/koma-note-girl.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>FRAME ATELIER</span></div></div>;
 }
 
 function App() {
   const [language, setLanguage] = useState<Language>(() => window.localStorage.getItem("koma-language") === "zh" ? "zh" : "en");
   const t = copy[language];
-  const [initialAnalysisConfig] = useState(() => loadAnalysisConfig(window.localStorage));
+  const auth = useGithubSession();
+  const authenticated = Boolean(auth.session?.authenticated);
+  const [signingOut, setSigningOut] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const [initialAnalysisConfig] = useState(() => loadAnalysisConfig({ getItem: () => null, setItem: () => undefined }));
   const [mode, setMode] = useState<"upload" | "url">("url");
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
@@ -532,10 +543,19 @@ function App() {
   const [outputSchema, setOutputSchema] = useState(initialAnalysisConfig.draft.outputSchema);
   const [fieldDescriptions, setFieldDescriptions] = useState<AnalysisFieldDescription[]>(initialAnalysisConfig.draft.fieldDescriptions ?? []);
   const [outputSchemaRequestKey, setOutputSchemaRequestKey] = useState(initialAnalysisConfig.draft.outputSchemaRequestKey ?? "");
+  const [configAccountId, setConfigAccountId] = useState<string | null>(null);
+  const accountId = auth.session?.user?.id ? String(auth.session.user.id) : null;
+  const accountIdRef = useRef(accountId);
+  accountIdRef.current = accountId;
+  const accountStorage = useMemo(() => ({ getItem: (key: string) => window.localStorage.getItem(`${key}:github:${accountId}`), setItem: (key: string, value: string) => window.localStorage.setItem(`${key}:github:${accountId}`, value) }), [accountId]);
   const [defaultConfig, setDefaultConfig] = useState<AnalysisDraft | undefined>(initialAnalysisConfig.defaultConfig);
   const [generatingSchema, setGeneratingSchema] = useState(false);
   const [schemaActionError, setSchemaActionError] = useState("");
   const [configNotice, setConfigNotice] = useState("");
+  const [hasLegacyDraft, setHasLegacyDraft] = useState(() => {
+    const saved = loadAnalysisConfig(window.localStorage);
+    return Boolean(saved.draft.instruction || saved.draft.outputSchema || saved.draft.suggestionIds.length || saved.defaultConfig);
+  });
   const [serviceInfo, setServiceInfo] = useState<ServiceInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
@@ -574,6 +594,16 @@ function App() {
     ...(outputSchemaRequestKey ? { outputSchemaRequestKey } : {})
   };
 
+  function currentWorkspaceRequest() {
+    return createWorkspaceRequestGuard(() => ({ navigationRevision: jobNavigationRevisionRef.current, accountId: accountIdRef.current }));
+  }
+
+  async function checkMissingJobAccess(expectedAccountId: string | null, signal: AbortSignal) {
+    const response = await fetch("/api/auth/session", { cache: "no-store", signal });
+    if (!response.ok) throw new Error(languageRef.current === "zh" ? "暂时无法确认登录状态，请稍后重试。" : "Could not check your session. Please try again shortly.");
+    return classifyMissingJobAccess(await response.json() as AccessSession, expectedAccountId);
+  }
+
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
@@ -581,8 +611,24 @@ function App() {
   }, [language]);
 
   useEffect(() => {
-    updateAnalysisDraft(window.localStorage, currentAnalysisDraft);
-  }, [instruction, suggestionIds, outputSchema, fieldDescriptions, outputSchemaRequestKey]);
+    if (authenticated && accountId === configAccountId) updateAnalysisDraft(accountStorage, currentAnalysisDraft);
+  }, [instruction, suggestionIds, outputSchema, fieldDescriptions, outputSchemaRequestKey, authenticated, accountId, configAccountId, accountStorage]);
+
+  useEffect(() => {
+    const stored = loadAnalysisConfig(authenticated ? accountStorage : { getItem: () => null, setItem: () => undefined });
+    setInstruction(stored.draft.instruction);
+    setSuggestionIds(stored.draft.suggestionIds.filter(isAnalysisSuggestionId));
+    setOutputSchema(stored.draft.outputSchema);
+    setFieldDescriptions(stored.draft.fieldDescriptions ?? []);
+    setOutputSchemaRequestKey(stored.draft.outputSchemaRequestKey ?? "");
+    setDefaultConfig(stored.defaultConfig);
+    setConfigAccountId(authenticated ? accountId : null);
+    setFile(null); setUrl(""); setConfigNotice("");
+    setAccountError("");
+    if (!authenticated) {
+      setEditorInitialSchema(""); setEditorInitialFieldDescriptions([]); setSchemaActionError("");
+    }
+  }, [authenticated, accountId, accountStorage]);
 
   useEffect(() => () => {
     schemaGenerationRequestRef.current += 1;
@@ -616,6 +662,7 @@ function App() {
   }, [showMoreMenu]);
 
   useEffect(() => {
+    if (auth.loading) return;
     const syncJobRoute = async () => {
       jobRouteAbortRef.current?.abort();
       jobRouteAbortRef.current = null;
@@ -632,6 +679,8 @@ function App() {
 
       const revision = jobNavigationRevisionRef.current + 1;
       jobNavigationRevisionRef.current = revision;
+      const isCurrent = currentWorkspaceRequest();
+      const expectedAccountId = accountIdRef.current;
       const match = window.location.pathname.match(/^\/jobs\/([a-f0-9-]{20,64})\/?$/i);
       setError("");
       if (!match) {
@@ -645,18 +694,26 @@ function App() {
       setBusy(true);
       try {
         const response = await fetch(`/api/jobs/${match[1]}`, { cache: "no-store", signal: controller.signal });
+        if (!isCurrent()) return;
         if (!response.ok) {
           const routeCopy = routeErrorCopyRef.current;
+          if (response.status === 401) { auth.expire(); throw new Error(languageRef.current === "zh" ? "请登录后打开自己的视频记录。" : "Sign in to open your private video."); }
+          if (response.status === 404) {
+            const access = await checkMissingJobAccess(expectedAccountId, controller.signal);
+            if (!isCurrent()) return;
+            if (access === "expired") { auth.expire(); return; }
+            if (access === "account-changed") { auth.refresh(); return; }
+          }
           throw new Error(response.status === 404 ? routeCopy.jobMissing : routeCopy.startFailed);
         }
         const nextJob = await response.json() as Job;
-        if (jobNavigationRevisionRef.current === revision) setJob(nextJob);
+        if (isCurrent()) setJob(nextJob);
       } catch (cause) {
-        if (!controller.signal.aborted && jobNavigationRevisionRef.current === revision) {
+        if (!controller.signal.aborted && isCurrent()) {
           setError(translateServerError(cause instanceof Error ? cause.message : String(cause), languageRef.current));
         }
       } finally {
-        if (!controller.signal.aborted && jobNavigationRevisionRef.current === revision) setBusy(false);
+        if (!controller.signal.aborted && isCurrent()) setBusy(false);
         if (jobRouteAbortRef.current === controller) jobRouteAbortRef.current = null;
       }
     };
@@ -668,32 +725,42 @@ function App() {
       jobRouteAbortRef.current = null;
       window.removeEventListener("popstate", syncJobRoute);
     };
-  }, []);
+  }, [auth.loading, authenticated, accountId]);
 
   useEffect(() => {
     if (!job?.id || job.status === "done" || job.status === "failed") return undefined;
     const expectedJobId = job.id;
+    const expectedAccountId = accountIdRef.current;
+    const isCurrent = currentWorkspaceRequest();
     const controller = new AbortController();
     let polling = false;
     jobPollAbortRef.current?.abort();
     jobPollAbortRef.current = controller;
     const poll = async () => {
-      if (polling || controller.signal.aborted) return;
+      if (polling || controller.signal.aborted || !isCurrent()) return;
       polling = true;
       try {
         const response = await fetch(`/api/jobs/${expectedJobId}`, { cache: "no-store", signal: controller.signal });
+        if (controller.signal.aborted || !isCurrent()) return;
+        if (response.status === 401) { auth.expire(); setJob(null); controller.abort(); return; }
         if (response.status === 404) {
-          // 管理员可能删除任务：停止轮询，标记为失败而不是重复请求。
-          setJob((current) => current?.id === expectedJobId ? { ...current, status: "failed", error: t.jobMissing } : current);
+          const access = await checkMissingJobAccess(expectedAccountId, controller.signal);
+          if (controller.signal.aborted || !isCurrent()) return;
+          setJob(null);
+          if (access === "expired") auth.expire();
+          else if (access === "account-changed") auth.refresh();
+          else setError(t.jobMissing);
+          controller.abort();
           return;
         }
         if (!response.ok) throw new Error(t.jobMissing);
         const nextJob = await response.json() as Job;
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && isCurrent()) {
           setJob((current) => current?.id === expectedJobId ? nextJob : current);
+          setError("");
         }
       } catch (pollError) {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && isCurrent()) {
           setError(translateServerError(pollError instanceof Error ? pollError.message : String(pollError), language));
         }
       } finally {
@@ -710,7 +777,8 @@ function App() {
 
   async function startAnalysis(event?: FormEvent) {
     event?.preventDefault();
-    if (generatingSchema) return;
+    if (!authenticated) { auth.expire(); return; }
+    if (generatingSchema || busy) return;
     if (outputSchemaNeedsReview) {
       setSchemaActionError(t.schemaNeedsReview);
       setEditorInitialSchema(outputSchema);
@@ -725,43 +793,49 @@ function App() {
     jobPollAbortRef.current?.abort();
     const navigationRevision = jobNavigationRevisionRef.current + 1;
     jobNavigationRevisionRef.current = navigationRevision;
+    const isCurrent = currentWorkspaceRequest();
     setBusy(true); setError(""); setJob(null); setUploadPercent(null);
     try {
       if (composedInstruction.length > MAX_ANALYSIS_INSTRUCTION_CHARS) throw new Error(t.requestTooLong);
       const parsedOutputSchema = parseOutputSchema(outputSchema, t.invalidSchema);
       if (mode === "upload") {
         if (!file) throw new Error(t.missingFile);
-        const jobId = await uploadWithProgress(file, parsedOutputSchema, navigationRevision);
-        if (jobNavigationRevisionRef.current !== navigationRevision) return;
+        const jobId = await uploadWithProgress(file, parsedOutputSchema, isCurrent);
+        if (!isCurrent()) return;
         const jobResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
+        if (!isCurrent()) return;
+        if (jobResponse.status === 401) auth.expire();
         if (!jobResponse.ok) throw new Error(jobResponse.status === 404 ? t.jobMissing : t.startFailed);
         const nextJob = await jobResponse.json() as Job;
-        if (jobNavigationRevisionRef.current !== navigationRevision) return;
+        if (!isCurrent()) return;
         setJob(nextJob);
         window.history.replaceState({}, "", `/jobs/${jobId}`);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
         const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json", ...analysisAccessHeaders }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: composedInstruction || undefined, outputSchema: parsedOutputSchema }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
+        if (!isCurrent()) return;
+        if (response.status === 401) auth.expire();
         if (!response.ok) throw new Error(body.error || t.startFailed);
         if (!body.jobId) throw new Error(t.startFailed);
-        if (jobNavigationRevisionRef.current !== navigationRevision) return;
         const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
+        if (!isCurrent()) return;
+        if (jobResponse.status === 401) auth.expire();
         if (!jobResponse.ok) throw new Error(jobResponse.status === 404 ? t.jobMissing : t.startFailed);
         const nextJob = await jobResponse.json() as Job;
-        if (jobNavigationRevisionRef.current !== navigationRevision) return;
+        if (!isCurrent()) return;
         setJob(nextJob);
         window.history.replaceState({}, "", `/jobs/${body.jobId}`);
       }
     } catch (submitError) {
-      if (jobNavigationRevisionRef.current !== navigationRevision) return;
+      if (!isCurrent()) return;
       const message = submitError instanceof Error ? submitError.message : String(submitError);
       const clientMessage = message === t.missingFile || message === t.missingUrl || message === t.invalidSchema || message === t.requestTooLong;
       setError(clientMessage ? message : translateServerError(message, language));
       if (message === t.missingUrl) urlInputRef.current?.focus();
       if (message === t.missingFile) dropZoneRef.current?.focus();
     } finally {
-      if (jobNavigationRevisionRef.current === navigationRevision) {
+      if (isCurrent()) {
         setBusy(false);
         setUploadPercent(null);
       }
@@ -769,19 +843,20 @@ function App() {
   }
 
   // 用 XMLHttpRequest 上传以拿到真实进度；返回创建的任务 id。
-  function uploadWithProgress(video: File, parsedOutputSchema: unknown, navigationRevision: number): Promise<string> {
+  function uploadWithProgress(video: File, parsedOutputSchema: unknown, isCurrent: () => boolean): Promise<string> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `/api/analyze/upload?lang=${language}`);
-      xhr.setRequestHeader("x-koma-admin", "1");
+      xhr.setRequestHeader("X-Koma-Client", "1");
       xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && jobNavigationRevisionRef.current === navigationRevision) {
+        if (event.lengthComputable && isCurrent()) {
           setUploadPercent(Math.round((event.loaded / event.total) * 100));
         }
       };
       xhr.onload = () => {
         let body: { jobId?: string; error?: string } = {};
         try { body = JSON.parse(xhr.responseText); } catch { /* 保留空对象走错误分支 */ }
+        if (xhr.status === 401 && isCurrent()) auth.expire();
         if (xhr.status >= 200 && xhr.status < 300 && body.jobId) return resolve(body.jobId);
         reject(new Error(body.error || t.startFailed));
       };
@@ -797,8 +872,19 @@ function App() {
   }
 
   async function retryAnalysis() {
-    // 失败后重试：重新提交同一个来源（本地文件或视频地址）。
-    await startAnalysis();
+    if (!job?.owned || !job.retryable || busy) return;
+    const isCurrent = currentWorkspaceRequest();
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/my/jobs/${job.id}/retry`, { method: "POST", headers: analysisAccessHeaders });
+      if (!isCurrent()) return;
+      if (response.status === 401) auth.expire();
+      const body = await response.json() as { jobId?: string; error?: string };
+      if (!isCurrent()) return;
+      if (!response.ok || !body.jobId) throw new Error(body.error || t.startFailed);
+      openHistoryJob(body.jobId);
+    } catch (cause) { if (isCurrent()) setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language)); }
+    finally { if (isCurrent()) setBusy(false); }
   }
 
   function openHistoryJob(id: string) {
@@ -811,13 +897,22 @@ function App() {
 
   async function deleteOwnedJob(id: string): Promise<boolean> {
     if (!window.confirm(t.confirmDeleteOwn)) return false;
-    const response = await fetch(`/api/my/jobs/${id}`, { method: "DELETE", headers: { "x-koma-user": "1" } });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error || t.deleteFailed);
+    const isCurrent = currentWorkspaceRequest();
+    try {
+      const response = await fetch(`/api/my/jobs/${id}`, { method: "DELETE", headers: analysisAccessHeaders });
+      if (!isCurrent()) return false;
+      if (response.status === 401) auth.expire();
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        if (!isCurrent()) return false;
+        throw new Error(body.error || t.deleteFailed);
+      }
+      if (job?.id === id) leaveJob();
+      return true;
+    } catch (cause) {
+      if (!isCurrent()) return false;
+      throw cause;
     }
-    if (job?.id === id) leaveJob();
-    return true;
   }
 
   function leaveJob() {
@@ -825,7 +920,14 @@ function App() {
     jobRouteAbortRef.current?.abort();
     jobRouteAbortRef.current = null;
     jobPollAbortRef.current?.abort();
+    schemaGenerationRequestRef.current += 1;
+    schemaGenerationAbortRef.current?.abort();
+    schemaGenerationAbortRef.current = null;
+    setGeneratingSchema(false);
+    setShowAdvancedSettings(false);
     setJob(null);
+    setShowHistory(false);
+    setBusy(false);
     setFile(null);
     setUrl("");
     setError("");
@@ -852,6 +954,7 @@ function App() {
   }
 
   async function generateOutputSchema() {
+    if (!authenticated) { auth.expire(); return; }
     setSchemaActionError("");
     setConfigNotice("");
     if (!composedInstruction) {
@@ -872,6 +975,7 @@ function App() {
     const requestId = schemaGenerationRequestRef.current + 1;
     schemaGenerationRequestRef.current = requestId;
     schemaGenerationAbortRef.current = controller;
+    const isCurrent = currentWorkspaceRequest();
     setGeneratingSchema(true);
     try {
       const selectedSuggestions = new Set(suggestionIds);
@@ -886,6 +990,8 @@ function App() {
         signal: controller.signal
       });
       const body = await response.json().catch(() => ({})) as { outputSchema?: unknown; fieldDescriptions?: unknown; error?: string };
+      if (controller.signal.aborted || !isCurrent() || schemaGenerationRequestRef.current !== requestId) return;
+      if (response.status === 401) auth.expire();
       if (!response.ok) {
         if (response.status === 503) throw new Error(t.schemaUnavailable);
         if ([400, 401, 403, 429].includes(response.status)) throw new Error(body.error || t.schemaGenerateFailed);
@@ -901,11 +1007,11 @@ function App() {
       setSchemaDialogInitialView("review");
       setShowAdvancedSettings(true);
     } catch (cause) {
-      if (controller.signal.aborted || schemaGenerationRequestRef.current !== requestId) return;
+      if (controller.signal.aborted || !isCurrent() || schemaGenerationRequestRef.current !== requestId) return;
       const message = cause instanceof Error ? cause.message : t.schemaGenerateFailed;
       setSchemaActionError(message === t.schemaUnavailable || message === t.schemaGenerateFailed ? message : translateServerError(message, language) || t.schemaGenerateFailed);
     } finally {
-      if (schemaGenerationRequestRef.current === requestId) {
+      if (isCurrent() && schemaGenerationRequestRef.current === requestId) {
         schemaGenerationAbortRef.current = null;
         setGeneratingSchema(false);
       }
@@ -917,14 +1023,14 @@ function App() {
   }
 
   function saveCurrentAsDefault() {
-    updateAnalysisDraft(window.localStorage, currentAnalysisDraft);
-    const stored = saveAnalysisDefault(window.localStorage, currentAnalysisDraft);
+    updateAnalysisDraft(accountStorage, currentAnalysisDraft);
+    const stored = saveAnalysisDefault(accountStorage, currentAnalysisDraft);
     setDefaultConfig(stored.defaultConfig);
     setConfigNotice(t.defaultSaved);
   }
 
   function restoreSavedDefault() {
-    const stored = restoreAnalysisDefault(window.localStorage);
+    const stored = restoreAnalysisDefault(accountStorage);
     if (!stored.defaultConfig) return;
     setInstruction(stored.draft.instruction);
     setSuggestionIds(stored.draft.suggestionIds.filter(isAnalysisSuggestionId));
@@ -936,45 +1042,79 @@ function App() {
     setConfigNotice(t.defaultRestored);
   }
 
+  function importLegacyDraft() {
+    const stored = loadAnalysisConfig(window.localStorage);
+    const next = stored.draft.instruction || stored.draft.outputSchema || stored.draft.suggestionIds.length ? stored.draft : stored.defaultConfig;
+    if (!next) return;
+    setInstruction(next.instruction);
+    setSuggestionIds(next.suggestionIds.filter(isAnalysisSuggestionId));
+    setOutputSchema(next.outputSchema);
+    setFieldDescriptions(next.fieldDescriptions ?? []);
+    setOutputSchemaRequestKey(next.outputSchemaRequestKey ?? "");
+    setSchemaActionError("");
+    setHasLegacyDraft(false);
+    setConfigNotice(language === "zh" ? "已载入旧草稿，请检查后再分析。" : "Older draft loaded. Review it before analysis.");
+  }
+
+  function enterLibrary() {
+    leaveJob();
+    setShowHistory(true);
+  }
+
+  async function signOut() {
+    setSigningOut(true); setAccountError("");
+    try { await auth.logout(); leaveJob(); setShowMoreMenu(false); }
+    catch { setAccountError(language === "zh" ? "暂时无法退出，请重试。" : "Could not sign out. Please try again."); }
+    finally { setSigningOut(false); }
+  }
+
+  function applyStarter(kind: "learn" | "meeting" | "products") {
+    const requests = language === "zh" ? {
+      learn: "帮我整理这段课程或讲解：按主题归纳知识点，解释关键概念，列出重要例子与对应时间点，最后整理一份复习提纲。",
+      meeting: "整理这次访谈或会议：区分主要话题，提取各方观点、已作出的决定、待办事项与负责人。用时间点标注依据，未明确的信息请留空。",
+      products: "整理视频中出现的产品：名称、卖点、价格、使用场景与首次出现的时间。区分实际演示和口头主张，不补充视频之外的信息。"
+    } : {
+      learn: "Organize this lesson by topic. Explain key concepts, capture important examples with timestamps, and finish with a concise study outline.",
+      meeting: "Organize this interview or meeting by topic. Extract perspectives, decisions, action items, and owners with timestamps. Leave unspecified information empty.",
+      products: "List the products shown, their features, prices, use cases, and first timestamps. Distinguish demonstrations from spoken claims; do not add facts outside the video."
+    };
+    setInstruction(requests[kind]); setSuggestionIds([]); setSchemaActionError(""); setConfigNotice("");
+  }
+
   return <div className="app-shell">
-    <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
-      <button className="header-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
-      <button className="header-button" type="button" disabled={generatingSchema} onClick={() => setShowHistory(true)}><Glyph name="clock" size={16} />{t.history}</button>
-      <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" disabled={generatingSchema} aria-label={`${t.admin} / ${t.help}`} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button></div>}</div>
+    <header className="site-header"><div className="header-inner"><Brand onClick={job || showHistory ? goHome : undefined} label={t.backHome} />
+      {authenticated && <nav className="workspace-nav" aria-label={language === "zh" ? "工作区导航" : "Workspace navigation"}><button type="button" className={!job && !showHistory ? "selected" : ""} aria-current={!job && !showHistory ? "page" : undefined} onClick={goHome}>{language === "zh" ? "新分析" : "New analysis"}</button><button type="button" className={showHistory ? "selected" : ""} aria-current={showHistory ? "page" : undefined} onClick={enterLibrary}>{language === "zh" ? "资料库" : "Library"}{Boolean(auth.session?.legacyJobCount) && <i aria-label={language === "zh" ? "有旧任务可找回" : "Older jobs available"} />}</button></nav>}
+      <div className="header-actions"><button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
+      {authenticated && <span className="account-identity">{auth.session?.user?.avatarUrl && <img src={auth.session.user.avatarUrl} alt="" referrerPolicy="no-referrer" />}<span>{auth.session?.user?.login}</span></span>}
+      <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" disabled={generatingSchema} aria-label={language === "zh" ? "更多选项" : "More options"} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a>{authenticated && <button type="button" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? (language === "zh" ? "正在退出…" : "Signing out…") : (language === "zh" ? "退出登录" : "Sign out")}</button>}</div>}</div>
     </div></div></header>
 
     <main className="main-shell">
-      {!job && <section className="landing-layout">
-        <div className="hero-copy">
-          <div className="hero-badge"><span />{t.badge}</div>
-          <h1>{t.hero}</h1>
-          <p>{t.intro}</p>
-          <div className="hero-flow" aria-label={`${t.flowVideo}, ${t.flowSignals}, ${t.flowOutput}`}>
-            <span>{t.flowVideo}</span><i aria-hidden="true" /><span>{t.flowSignals}</span><i aria-hidden="true" /><strong>{t.flowOutput}</strong>
-          </div>
-          <div className="hero-character">
-            <img className="hero-character-portrait" src="/koma-mascot.png" alt="" fetchPriority="high" />
-            <div className="hero-character-copy"><span>FRAME ASSISTANT · 00:00:01</span><strong>{t.mascotCue}</strong><small>{t.mascotCueText}</small></div>
-          </div>
-        </div>
+      {accountError && <p className="account-error" role="alert">{accountError}</p>}
+      {auth.loading && !job && <div className="session-loading" role="status"><img src="/koma-note-girl.png" alt="" /><span>{language === "zh" ? "正在打开工作区…" : "Opening your workspace…"}</span></div>}
+      {!auth.loading && !authenticated && !job && <WelcomeScreen language={language} enabled={Boolean(auth.session?.enabled)} unavailable={auth.unavailable} expired={auth.expired} error={error} onRefresh={auth.refresh} />}
+      {authenticated && !job && showHistory && <WorkspaceLibrary key={accountId} language={language} onOpen={openHistoryJob} onDelete={deleteOwnedJob} onNew={goHome} onUnauthorized={auth.expire} legacyJobCount={auth.session?.legacyJobCount || 0} onClaimed={auth.refresh} />}
+      {authenticated && !job && !showHistory && <section className="landing-layout workspace-compose">
+        <aside className="compose-aside"><span className="page-label">A NEW FRAME OF MIND</span><h1>{language === "zh" ? <>今天，<br />想看懂什么？</> : <>What’s worth<br />a closer look?</>}</h1><p>{language === "zh" ? "放进一段视频，带走一份能继续使用的笔记。" : "Bring a video. Leave with notes you can put to work."}</p><div className="compose-character"><img src="/koma-note-girl.png" alt="" /><span>{language === "zh" ? "逐帧整理员，随时就位。" : "Your frame assistant is ready."}</span></div><div className="compose-guide"><div><span>01</span><p>{language === "zh" ? "上传视频，或粘贴公开链接。" : "Upload a video or paste a public link."}</p></div><div><span>02</span><p>{language === "zh" ? "写下你关心的内容，或直接开始。" : "Tell Koma what matters, or simply start."}</p></div><div><span>03</span><p>{language === "zh" ? "在资料库回看、检索和下载。" : "Return, search, and download from your library."}</p></div></div><button type="button" className="compose-library-link" onClick={enterLibrary}><span>{language === "zh" ? "打开我的资料库" : "Open my video library"}</span><span aria-hidden="true"><Icon name="arrow-up-right" size={18} /></span></button></aside>
 
         <form className="capture-card" onSubmit={startAnalysis} aria-busy={busy || generatingSchema} aria-label={t.startOne}>
-          <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><img src="/koma-icon-64.png" alt="" /></header>
+          <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><img src="/koma-note-girl.png" alt="" /></header>
           <div className="workbench-source">
-            <h3 id="video-source-heading" className="workbench-section-label">{t.sourceLabel}</h3>
+            <h3 id="video-source-heading" className="workbench-section-label"><span className="step-number">01</span>{t.sourceLabel}</h3>
             <div className="mode-switch" role="group" aria-label={t.sourceLabel}>
               <button className={mode === "upload" ? "selected" : ""} type="button" aria-pressed={mode === "upload"} onClick={() => setMode("upload")}><Glyph name="upload" size={16} />{t.upload}</button>
               <button className={mode === "url" ? "selected" : ""} type="button" aria-pressed={mode === "url"} onClick={() => setMode("url")}><Glyph name="link" size={16} />{t.videoUrl}</button>
             </div>
-            {mode === "upload" ? <div ref={dropZoneRef} className={`drop-zone ${file ? "has-file" : ""}`} onClick={() => fileInputRef.current?.click()} onDragOver={(event: DragEvent) => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }} role="button" tabIndex={0} aria-invalid={error === t.missingFile} aria-describedby={error === t.missingFile ? "analysis-form-error" : undefined} onKeyDown={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click(); }}>
+            {mode === "upload" ? <div ref={dropZoneRef} className={`drop-zone ${file ? "has-file" : ""}`} onClick={() => fileInputRef.current?.click()} onDragOver={(event: DragEvent) => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }} role="button" tabIndex={0} aria-invalid={error === t.missingFile} aria-describedby={error === t.missingFile ? "analysis-form-error" : undefined} onKeyDown={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); fileInputRef.current?.click(); } }}>
               <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
               <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : fileHint}</small>
             </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} aria-invalid={error === t.missingUrl} aria-describedby={error === t.missingUrl ? "analysis-form-error" : undefined} /><small>{t.urlHint}</small></label>}
             {sourceError && <p id="analysis-form-error" className="form-error" role="alert">{error}</p>}
           </div>
           <section className="workbench-analysis" aria-labelledby="analysis-mode-heading">
-            <h3 id="analysis-mode-heading" className="workbench-section-label">{t.presetsLabel}</h3>
+            <h3 id="analysis-mode-heading" className="workbench-section-label"><span className="step-number">02</span>{t.presetsLabel}</h3>
             <p className="workbench-section-hint">{t.presetsHint}</p>
+            <div className="starter-templates"><span>{language === "zh" ? "从一个用途开始" : "Start with a use case"}</span>{(["learn", "meeting", "products"] as const).map((kind, index) => <button key={kind} type="button" disabled={generatingSchema || busy} onClick={() => applyStarter(kind)}>{(language === "zh" ? ["课程笔记", "访谈 / 会议", "产品整理"] : ["Study notes", "Interview / meeting", "Product notes"])[index]}<span aria-hidden="true"><Icon name="arrow-up-right" size={18} /></span></button>)}</div>
             <label className="analysis-request-field">
               <span className="analysis-request-label"><strong>{t.analysisRequirement}</strong><small className={instruction.length > instructionLimit ? "over-limit" : ""}>{instruction.length}/{instructionLimit}</small></span>
               <textarea value={instruction} disabled={generatingSchema} onChange={(event) => { setInstruction(event.target.value); setSchemaActionError(""); setConfigNotice(""); }} maxLength={instructionLimit} rows={4} placeholder={t.instructionPlaceholder} />
@@ -983,7 +1123,7 @@ function App() {
               <span>{t.quickSuggestions}</span>
               <div>{analysisSuggestions(language).map((suggestion) => {
                 const selected = suggestionIds.includes(suggestion.id);
-                return <button key={suggestion.id} type="button" disabled={generatingSchema} className={selected ? "selected" : ""} aria-pressed={selected} aria-label={`${suggestion.label}: ${suggestion.description}`} onClick={() => toggleSuggestion(suggestion.id)}><i aria-hidden="true">{selected ? "✓" : "+"}</i><span><strong>{suggestion.label}</strong><small>{suggestion.description}</small></span></button>;
+                return <button key={suggestion.id} type="button" disabled={generatingSchema} className={selected ? "selected" : ""} aria-pressed={selected} aria-label={`${suggestion.label}: ${suggestion.description}`} onClick={() => toggleSuggestion(suggestion.id)}><i aria-hidden="true"><Icon name={selected ? "check" : "plus"} size={13} /></i><span><strong>{suggestion.label}</strong><small>{suggestion.description}</small></span></button>;
               })}</div>
             </div>
             <div className={`json-workflow ${hasOutputSchema && !outputSchemaNeedsReview ? "configured" : ""}`}>
@@ -998,13 +1138,14 @@ function App() {
             </div>
             {schemaActionError && <p className="analysis-config-error" role="alert">{schemaActionError}</p>}
             <div className="config-memory"><span><i aria-hidden="true" />{configNotice || t.configAutosaved}</span><div><button type="button" disabled={generatingSchema} onClick={saveCurrentAsDefault}>{t.saveDefault}</button><button type="button" disabled={generatingSchema || !defaultConfig} onClick={restoreSavedDefault}>{t.restoreDefault}</button></div></div>
+            {hasLegacyDraft && !instruction && !suggestionIds.length && !outputSchema && <button className="legacy-draft-button" type="button" disabled={generatingSchema || busy} onClick={importLegacyDraft}>{language === "zh" ? "载入此浏览器的旧版分析草稿" : "Load this browser’s older analysis draft"} <Icon name="arrow-up-right" size={15} /></button>}
           </section>
           <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy || generatingSchema}>{busy ? (uploadPercent !== null ? `${t.uploading} ${uploadPercent}%` : t.starting) : t.start}<Glyph name="arrow" size={17} /></button></div>
           {uploadPercent !== null && <div className="upload-track" aria-label={`${t.uploadProgress}: ${uploadPercent}%`}><span style={{ width: `${uploadPercent}%` }} /></div>}
           {error && !sourceError && <p id="analysis-form-error" className="form-error" role="alert">{error}</p>}
         </form>
       </section>}
-      {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} language={language} />}
+      {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} retrying={busy} language={language} />}
       {hasResult && <ResultView job={job} onRestart={restartAnalysis} onDelete={deleteOwnedJob} language={language} />}
     </main>
     {showAdvancedSettings && <AdvancedSettingsDialog language={language} outputSchema={editorInitialSchema} fieldDescriptions={editorInitialFieldDescriptions} initialView={schemaDialogInitialView} returnFocusRef={schemaDialogReturnFocusRef} onCancel={() => setShowAdvancedSettings(false)} onApply={(next) => {
@@ -1016,19 +1157,18 @@ function App() {
       setConfigNotice("");
       setError("");
     }} />}
-    {showHistory && <HistoryModal onClose={() => setShowHistory(false)} onOpen={openHistoryJob} onDelete={deleteOwnedJob} language={language} />}
     {showSettings && <InfoModal onClose={() => setShowSettings(false)} language={language} />}
   </div>;
 }
 
-function ProgressView({ job, progress, error, onClear, onRetry, language }: { job: Job; progress: number; error: string; onClear: () => void; onRetry: () => void; language: Language }) {
+function ProgressView({ job, progress, error, onClear, onRetry, retrying, language }: { job: Job; progress: number; error: string; onClear: () => void; onRetry: () => void; retrying: boolean; language: Language }) {
   const t = copy[language];
   const failed = job.status === "failed";
   const safeProgress = Math.min(100, Math.max(0, progress));
   const stageLabel = job.progress ? t.stage[job.progress.stage] || t.processing : t.processing;
   const steps = progressStepStates(job.progress?.stage || "queued", job.status, safeProgress);
-  return <section className="progress-layout"><div className="progress-copy"><span className="page-label">{job.source === "url" ? t.analyzingRemote : t.analyzingLocal}</span><h1>{t.progressTitle}</h1><p>{t.progressText}</p></div>
-    <div className={`progress-card ${failed ? "failed" : ""}`}><div className="progress-mascot"><img src="/koma-mascot.png" alt="" /></div><div className="progress-status"><span aria-live="polite" aria-atomic="true">{stageLabel}</span><strong aria-hidden={failed}>{failed ? "!" : `${safeProgress}%`}</strong></div>{!failed && <div className="progress-track" role="progressbar" aria-label={stageLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeProgress}><span style={{ width: `${safeProgress}%` }} /></div>}<p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{translateServerError(error || job.error, language)}</div>}<div className="process-list"><span className={steps[0]} aria-current={steps[0] === "current" ? "step" : undefined}>{t.entered}</span><span className={steps[1]} aria-current={steps[1] === "current" ? "step" : undefined}>{t.mediaAnalysis}</span><span className={steps[2]} aria-current={steps[2] === "current" ? "step" : undefined}>{t.readableResult}</span></div>{failed ? <div className="retry-row"><button className="primary-button" type="button" onClick={onRetry}>{t.retry}<Glyph name="arrow" size={17} /></button><button className="text-button" type="button" onClick={onClear}>{t.cancel}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
+  return <section className="progress-layout"><div className="progress-copy"><span className="page-label">{job.source === "url" ? t.analyzingRemote : t.analyzingLocal}</span><h1>{failed ? (language === "zh" ? "这次没能完成。" : "This one needs another try.") : t.progressTitle}</h1><p>{failed ? (job.retryable ? (language === "zh" ? "来源和分析要求已经保留，可以直接重试。" : "Your source and analysis request are saved. You can retry here.") : (language === "zh" ? "视频来源已不可用，请重新导入视频。" : "The video source is no longer available. Please import it again.")) : t.progressText}</p><strong className="progress-job-title">{job.title}</strong></div>
+    <div className={`progress-card ${failed ? "failed" : ""}`}><div className="progress-mascot"><img src="/koma-note-girl.png" alt="" /></div><div className="progress-status"><span aria-live="polite" aria-atomic="true">{stageLabel}</span><strong aria-hidden={failed}>{failed ? <Icon name="alert" size={44} /> : `${safeProgress}%`}</strong></div>{!failed && <div className="progress-track" role="progressbar" aria-label={stageLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeProgress}><span style={{ width: `${safeProgress}%` }} /></div>}<p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{translateServerError(error || job.error, language)}</div>}<div className="process-list"><span className={steps[0]} aria-current={steps[0] === "current" ? "step" : undefined}>{t.entered}</span><span className={steps[1]} aria-current={steps[1] === "current" ? "step" : undefined}>{t.mediaAnalysis}</span><span className={steps[2]} aria-current={steps[2] === "current" ? "step" : undefined}>{t.readableResult}</span></div>{failed ? <div className="retry-row">{job.owned && job.retryable && <button className="primary-button" type="button" disabled={retrying} onClick={onRetry}>{retrying ? t.starting : t.retry}<Glyph name="arrow" size={17} /></button>}<button className="text-button" type="button" onClick={onClear}>{language === "zh" ? "重新导入视频" : "Import another video"}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
   </section>;
 }
 
@@ -1049,9 +1189,30 @@ function ResultView({ job, onRestart, onDelete, language }: { job: Job; onRestar
   }, [result.title, language]);
   const selected = result.frames[selectedFrame] || result.frames[0];
   const [previewFrame, setPreviewFrame] = useState<Frame | null>(null);
+  const [transcriptQuery, setTranscriptQuery] = useState("");
+  const [matchCursor, setMatchCursor] = useState(0);
+  const [resultNotice, setResultNotice] = useState("");
+  const transcriptRefs = useRef(new Map<number, HTMLButtonElement>());
+  const matchingLines = useMemo(() => transcriptMatches(result.transcript, transcriptQuery), [result.transcript, transcriptQuery]);
+  useEffect(() => { setMatchCursor(0); }, [transcriptQuery]);
   useEffect(() => { setShowSubtitles(!result.hasSubtitles); }, [result.hasSubtitles]);
   const activeSubtitle = showSubtitles ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs) : null;
-  async function copyReplayLink() { await navigator.clipboard.writeText(window.location.href); setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1600); }
+  async function copyReplayLink() {
+    try { await navigator.clipboard.writeText(window.location.href); setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1600); }
+    catch { setResultNotice(language === "zh" ? "复制没有成功，可以复制浏览器地址栏中的链接。" : "Could not copy. You can copy the link from your browser’s address bar."); }
+  }
+  function jumpMatch(direction: number) {
+    if (!matchingLines.length) return;
+    const next = (matchCursor + direction + matchingLines.length) % matchingLines.length;
+    setMatchCursor(next);
+    const index = matchingLines[next];
+    syncToTime(result.transcript[index].startMs);
+    transcriptRefs.current.get(index)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  function exportNotes(format: "markdown" | "srt") {
+    const filename = `koma-${job.id}`;
+    downloadText(format === "srt" ? transcriptToSrt(result.transcript) : resultToMarkdown(result, language), `${filename}.${format === "srt" ? "srt" : "md"}`, format === "srt" ? "application/x-subrip" : "text/markdown");
+  }
   async function deleteResult() {
     setDeleting(true);
     try { await onDelete(job.id); }
@@ -1062,43 +1223,63 @@ function ResultView({ job, onRestart, onDelete, language }: { job: Job; onRestar
   function followPlayback() { const nextMs = Math.round((videoRef.current?.currentTime || 0) * 1000); setCurrentMs(nextMs); setSelectedFrame(frameIndexAtTime(result.frames, nextMs)); }
 
   return <section className="result-layout"><div className="result-main">
-    <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={() => void copyReplayLink()}><Glyph name="link" size={16} />{linkCopied ? t.linkCopied : t.clear}</button>{job.owned && <button className="result-delete-button" type="button" disabled={deleting} onClick={() => void deleteResult()}><Glyph name="trash" size={16} />{deleting ? t.deleting : t.deleteOwn}</button>}</div></div>
+    <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={() => void copyReplayLink()}><Glyph name="link" size={16} />{linkCopied ? t.linkCopied : job.visibility === "legacy-link" ? (language === "zh" ? "复制旧版回看链接" : "Copy legacy replay link") : t.clear}</button>{job.owned && <button className="result-delete-button" type="button" disabled={deleting} onClick={() => void deleteResult()}><Glyph name="trash" size={16} />{deleting ? t.deleting : t.deleteOwn}</button>}</div></div>
+    <div className="result-utility-bar"><span><i aria-hidden="true" />{job.visibility === "legacy-link" ? (language === "zh" ? "旧版链接 · 持有链接的人可查看" : "Legacy link · anyone with this link can view") : (language === "zh" ? "私人视频 · 仅登录本人账号后可见" : "Private video · only your signed-in account")}</span><div><button type="button" onClick={() => exportNotes("markdown")}>{language === "zh" ? "导出笔记" : "Export notes"}<small>.md <Icon name="download" size={13} /></small></button><button type="button" disabled={!result.transcript.length} onClick={() => exportNotes("srt")}>{language === "zh" ? "导出字幕" : "Export subtitles"}<small>.srt <Icon name="download" size={13} /></small></button></div></div>
+    {resultNotice && <p className="result-notice" role="status">{resultNotice}</p>}
+    <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
     <div className="summary-block"><span><Glyph name="spark" size={15} />{t.aiSummary}</span><p>{result.summary}</p></div>
     {Object.prototype.hasOwnProperty.call(result, "extractedData") && <StructuredData data={result.extractedData} jobId={job.id} language={language} />}
     {result.artifacts?.length ? <ArtifactPanel artifacts={result.artifacts} language={language} /> : null}
     <div className="stat-row"><div><span>{t.duration}</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>{t.frames}</span><strong>{result.frames.length}</strong></div><div><span>{t.subtitleLines}</span><strong>{result.transcript.length}</strong></div><div><span>{t.autoDelete}</span><strong className="persistent-status">{t.replayReady}</strong></div></div>
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
-    <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
+
     <section className="keyframe-panel" aria-label={t.frameTimeline}><div className="section-heading"><span>{t.keyFrameGallery}</span><small>{t.keyFrameGallerySub}</small></div><div className="frame-gallery">{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => { syncToTime(frame.atMs, false); setPreviewFrame(frame); }}><span className="frame-gallery-image"><img src={frame.url} alt={frame.caption || t.keyFrame} /><i>{formatTime(frame.atMs)}</i><em><Glyph name="zoom" size={14} />{t.clickToEnlarge}</em></span><strong>{frame.caption || `${t.keyFrame} ${index + 1}`}</strong></button>)}</div></section>
     <section className="chapters"><div className="section-heading"><span>{t.chapters}</span><small>{result.chapters.length ? `${result.chapters.length} ${t.chaptersCount} · ${t.chaptersSub}` : ""}</small></div>{result.chapters.length ? <div className="chapter-list">{(result.chapters || []).map((chapter, index) => <button type="button" className="chapter" key={`${chapter.startMs}-${index}`} onClick={() => syncToTime(chapter.startMs)}><span className="chapter-rail"><strong>{index + 1}</strong><i>{formatTime(chapter.startMs)} – {formatTime(chapter.endMs)}</i></span><span className="chapter-body"><strong>{chapter.title}</strong><p>{chapter.summary}</p></span><Glyph name="arrow" size={18} /></button>)}</div> : <div className="chapter-empty">{t.noChapters}</div>}</section>
   </div>
-  <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="link" size={14} />{t.remaining}</div></aside>
+  <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">WORDS & MOMENTS</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div>
+    <div className="transcript-search"><label><span className="sr-only">{language === "zh" ? "搜索字幕" : "Search transcript"}</span><input type="search" value={transcriptQuery} onChange={(event) => setTranscriptQuery(event.target.value)} placeholder={language === "zh" ? "找到你记得的那一句…" : "Find the words you remember…"} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); jumpMatch(event.shiftKey ? -1 : 1); } }} /></label>{transcriptQuery.trim() && <div className="transcript-search-controls"><span role="status">{matchingLines.length ? `${matchCursor + 1} / ${matchingLines.length}` : (language === "zh" ? "没有找到相关字幕" : "No matching subtitles")}</span><button type="button" disabled={!matchingLines.length} aria-label={language === "zh" ? "上一条匹配字幕" : "Previous match"} onClick={() => jumpMatch(-1)}><Icon name="arrow-up" size={17} /></button><button type="button" disabled={!matchingLines.length} aria-label={language === "zh" ? "下一条匹配字幕" : "Next match"} onClick={() => jumpMatch(1)}><Icon name="arrow-down" size={17} /></button></div>}</div>
+    <div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; if (transcriptQuery.trim() && !matchingLines.includes(index)) return null; return <button ref={(element) => { if (element) transcriptRefs.current.set(index, element); else transcriptRefs.current.delete(index); }} type="button" className={`transcript-line ${active ? "active" : ""} ${transcriptQuery.trim() && matchingLines[matchCursor] === index ? "search-current" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => { syncToTime(line.startMs); if (transcriptQuery.trim()) setMatchCursor(matchingLines.indexOf(index)); }}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p><HighlightedText text={line.text} query={transcriptQuery} /></p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="link" size={14} />{job.visibility === "legacy-link" ? (language === "zh" ? "旧版回看链接 · 请谨慎转发" : "Legacy replay link · share with care") : t.remaining}</div></aside>
+
   {previewFrame && <FramePreview frame={previewFrame} onClose={() => setPreviewFrame(null)} onPlay={() => { syncToTime(previewFrame.atMs); setPreviewFrame(null); }} onPrevious={() => { const index = result.frames.findIndex((frame) => frame.url === previewFrame.url); setPreviewFrame(result.frames[(index - 1 + result.frames.length) % result.frames.length]); }} onNext={() => { const index = result.frames.findIndex((frame) => frame.url === previewFrame.url); setPreviewFrame(result.frames[(index + 1) % result.frames.length]); }} language={language} />}
   </section>;
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const term = query.trim();
+  if (!term) return <>{text}</>;
+  const normalized = text.toLocaleLowerCase();
+  const pieces: ReactNode[] = [];
+  let cursor = 0;
+  let found = normalized.indexOf(term.toLocaleLowerCase());
+  while (found !== -1) {
+    pieces.push(text.slice(cursor, found), <mark key={found}>{text.slice(found, found + term.length)}</mark>);
+    cursor = found + term.length;
+    found = normalized.indexOf(term.toLocaleLowerCase(), cursor);
+  }
+  pieces.push(text.slice(cursor));
+  return <>{pieces}</>;
 }
 
 function StructuredData({ data, jobId, language }: { data: unknown; jobId: string; language: Language }) {
   const t = copy[language];
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const json = JSON.stringify(data, null, 2) ?? "null";
   async function copyJson() {
-    await navigator.clipboard.writeText(json);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    try {
+      await navigator.clipboard.writeText(json);
+      setCopyError(false); setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch { setCopyError(true); }
   }
   function downloadJson() {
-    const blob = new Blob([`${json}\n`], { type: "application/json" });
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = href;
-    link.download = `koma-${jobId}-extraction.json`;
-    link.click();
-    URL.revokeObjectURL(href);
+    downloadText(`${json}\n`, `koma-${jobId}-extraction.json`, "application/json");
   }
   return <section className="structured-panel">
     <div className="section-heading"><span>{t.structuredData}</span><small>{t.structuredDataSub}</small></div>
     <pre>{json}</pre>
     <div className="structured-actions"><button type="button" onClick={copyJson}>{copied ? t.copied : t.copyJson}</button><button type="button" onClick={downloadJson}>{t.downloadJson}</button><a href={`/api/jobs/${jobId}/extraction`} target="_blank" rel="noreferrer">API</a></div>
+    {copyError && <p className="form-error" role="alert">{language === "zh" ? "复制没有成功，可以直接下载 JSON 文件。" : "Could not copy. You can download the JSON file instead."}</p>}
   </section>;
 }
 
@@ -1126,8 +1307,8 @@ function FramePreview({ frame, onClose, onPlay, onPrevious, onNext, language }: 
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
   return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="frame-preview" role="dialog" aria-modal="true" aria-label={t.framePreview} onClick={(event) => event.stopPropagation()}>
-    <button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button>
-    <div className="frame-preview-image"><img src={frame.url} alt={frame.caption || t.keyFrame} /><button className="frame-nav previous" type="button" onClick={onPrevious} aria-label={t.previousFrame}>‹</button><button className="frame-nav next" type="button" onClick={onNext} aria-label={t.nextFrame}>›</button></div>
+    <button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}><Icon name="close" size={20} /></button>
+    <div className="frame-preview-image"><img src={frame.url} alt={frame.caption || t.keyFrame} /><button className="frame-nav previous" type="button" onClick={onPrevious} aria-label={t.previousFrame}><Icon name="chevron-left" size={24} /></button><button className="frame-nav next" type="button" onClick={onNext} aria-label={t.nextFrame}><Icon name="chevron-right" size={24} /></button></div>
     <div className="frame-preview-body"><span className="page-label">{t.framePreview} · {formatTime(frame.atMs)}</span><p>{frame.caption || t.keyFrame}</p><div className="frame-preview-actions"><a href={frame.url} target="_blank" rel="noreferrer">{t.openOriginal}</a><button className="primary-button" type="button" onClick={onPlay}><Glyph name="play" size={15} />{t.playThisMoment}</button></div></div>
   </div></div>;
 }
@@ -1296,7 +1477,7 @@ function AdvancedSettingsDialog({ language, outputSchema, fieldDescriptions, ini
     <form className="advanced-dialog-shell" onSubmit={submitSettings}>
       <header className="advanced-dialog-head">
         <div><span className="page-label">{isReview ? "KOMA FIELD REVIEW" : "KOMA JSON"}</span><h2 ref={titleRef} id="advanced-dialog-title" tabIndex={-1}>{isReview ? t.reviewFieldsTitle : t.customExtract}</h2><p id="advanced-dialog-description">{isReview ? t.reviewFieldsDescription : t.advancedDescription}</p></div>
-        <button className="advanced-dialog-close" type="button" onClick={onCancel} aria-label={t.close}>×</button>
+        <button className="advanced-dialog-close" type="button" onClick={onCancel} aria-label={t.close}><Icon name="close" size={20} /></button>
       </header>
       {isReview ? <div className="advanced-dialog-body field-review-body">
         <p className="candidate-fields-notice"><i aria-hidden="true" />{t.candidateFieldsNotice}</p>
@@ -1314,61 +1495,6 @@ function AdvancedSettingsDialog({ language, outputSchema, fieldDescriptions, ini
   </dialog>;
 }
 
-function HistoryModal({ onClose, onOpen, onDelete, language }: { onClose: () => void; onOpen: (id: string) => void; onDelete: (id: string) => Promise<boolean>; language: Language }) {
-  const t = copy[language];
-  const [jobs, setJobs] = useState<JobHistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    closeRef.current?.focus();
-    const controller = new AbortController();
-    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
-    window.addEventListener("keydown", onKeyDown);
-    fetch("/api/my/jobs", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({})) as { jobs?: JobHistoryItem[]; error?: string };
-        if (!response.ok) throw new Error(body.error || t.startFailed);
-        setJobs(Array.isArray(body.jobs) ? body.jobs : []);
-      })
-      .catch((cause) => { if (!controller.signal.aborted) setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => { controller.abort(); window.removeEventListener("keydown", onKeyDown); };
-  }, [language, t.startFailed]);
-
-  async function removeJob(id: string) {
-    setDeletingId(id); setError("");
-    try {
-      if (await onDelete(id)) setJobs((current) => current.filter((job) => job.id !== id));
-    } catch (cause) {
-      setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language));
-    } finally { setDeletingId(null); }
-  }
-
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" onClick={(event) => event.stopPropagation()}>
-    <button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button>
-    <div className="history-modal-head"><span className="page-label">KOMA HISTORY</span><h2 id="history-title">{t.historyTitle}</h2><p>{t.historyText}</p></div>
-    <div className="history-list">
-      {loading && <div className="history-empty">{t.historyLoading}</div>}
-      {!loading && !jobs.length && !error && <div className="history-empty"><Glyph name="clock" size={22} /><span>{t.historyEmpty}</span></div>}
-      {jobs.map((item) => <article className="history-item" key={item.id}>
-        <button className="history-item-main" type="button" onClick={() => void onOpen(item.id)}>
-          <span className={`history-status ${item.status}`}><i />{t.stage[item.progress.stage] || item.status}</span>
-          <strong>{item.title}</strong>
-          <small>{formatDate(item.createdAt, language)} · {item.source === "upload" ? t.upload : t.videoUrl}</small>
-          {item.status !== "done" && <span className="history-progress"><i style={{ width: `${Math.min(100, Math.max(0, item.progress.percent))}%` }} /></span>}
-        </button>
-        <div className="history-item-actions"><button type="button" onClick={() => void onOpen(item.id)}>{t.openResult}<Glyph name="arrow" size={14} /></button><button className="history-delete" type="button" disabled={deletingId === item.id} onClick={() => void removeJob(item.id)}><Glyph name="trash" size={14} />{deletingId === item.id ? t.deleting : t.deleteOwn}</button></div>
-      </article>)}
-    </div>
-    {error && <p className="form-error history-error" role="alert">{error}</p>}
-  </div></div>;
-}
-
 function InfoModal({ onClose, language }: { onClose: () => void; language: Language }) {
   const t = copy[language];
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -1383,7 +1509,7 @@ function InfoModal({ onClose, language }: { onClose: () => void; language: Langu
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button><div className="info-modal-head"><img src="/koma-icon-64.png" alt="" /><div><span className="page-label">KOMA GUIDE</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p></div></div><div className="help-steps">{t.aboutSteps.map((step) => <section key={step.title}><strong>{step.title}</strong><p>{step.text}</p></section>)}</div><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}><Icon name="close" size={20} /></button><div className="info-modal-head"><img src="/koma-note-girl.png" alt="" /><div><span className="page-label">KOMA GUIDE</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p></div></div><div className="help-steps">{t.aboutSteps.map((step) => <section key={step.title}><strong>{step.title}</strong><p>{step.text}</p></section>)}</div><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
 }
 
 export default App;

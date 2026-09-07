@@ -49,6 +49,20 @@ describe("job lifecycle cleanup", () => {
     await deleteJob(job.id);
   });
 
+  it("restores account ownership and retry source after a process reload without serializing the source URL", async () => {
+    const { createJob, serializeJob } = await loadJobs();
+    const database = await import("../persistence/database.js");
+    await database.saveAccount({ id: "123", login: "test-user", name: null, avatarUrl: "https://avatars.githubusercontent.com/u/123" });
+    const sourceUrl = "https://example.com/video.mp4?signature=private-source";
+    const job = await createJob({ source: "url", title: "retry me", accountId: "123", sourceUrl });
+    expect(JSON.stringify(serializeJob(job))).not.toContain("private-source");
+    await database.closeDatabase();
+    vi.resetModules();
+    const reloaded = await import("./jobs.js");
+    expect(await reloaded.loadJob(job.id)).toMatchObject({ accountId: "123", sourceUrl });
+    await reloaded.deleteJob(job.id);
+  });
+
   it("serializes artifact metadata without embedding file content", async () => {
     const { createJob, deleteJob, serializeJob, updateJob } = await loadJobs();
     const job = await createJob({ source: "upload", title: "a.mp4" });

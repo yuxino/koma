@@ -33,6 +33,7 @@ const specs = [
   ["PUBLIC_BASE_URL"], ["ASR_DIARIZATION", null, "off"],
   ["DEMO_REQUESTS_PER_IP_PER_DAY", null, "0"],
   ["ADMIN_PASSWORD"], ["ANALYSIS_REQUIRE_ADMIN", null, "false"], ["KOMA_CONFIG_SECRET"],
+  ["GITHUB_CLIENT_ID"], ["GITHUB_CLIENT_SECRET"], ["GITHUB_CALLBACK_URL"],
   ["DB_DRIVER", null, "sqlite"], ["KOMA_DATABASE_PATH", null, "./data/koma.sqlite"],
   ["DB_HOST"], ["DB_PORT", null, "3306"], ["DB_USER"], ["DB_PASSWORD"], ["DB_NAME", null, "koma"],
   ["DB_SSL", null, "false"], ["DB_CONNECTION_LIMIT", null, "5"], ["DB_AUTO_CREATE", null, "true"],

@@ -33,7 +33,7 @@ export async function initializeStorage(): Promise<void> {
 export async function putStoredFile(key: string, filePath: string, mimeType: string): Promise<void> {
   const safeKey = normalizeKey(key);
   if (storageDriver() === "oss") {
-    await (await getOssClient()).put(safeKey, filePath, { mime: mimeType, headers: { "cache-control": "private, max-age=3600" } });
+    await (await getOssClient()).put(safeKey, filePath, { mime: mimeType, headers: { "cache-control": "private, no-store", "x-oss-object-acl": "private" } });
     return;
   }
   const target = localObjectPath(safeKey);
@@ -44,7 +44,7 @@ export async function putStoredFile(key: string, filePath: string, mimeType: str
 export async function putStoredText(key: string, content: string, mimeType: string): Promise<void> {
   const safeKey = normalizeKey(key);
   if (storageDriver() === "oss") {
-    await (await getOssClient()).put(safeKey, Buffer.from(content, "utf8"), { mime: mimeType, headers: { "cache-control": "private, max-age=3600" } });
+    await (await getOssClient()).put(safeKey, Buffer.from(content, "utf8"), { mime: mimeType, headers: { "cache-control": "private, no-store", "x-oss-object-acl": "private" } });
     return;
   }
   const target = localObjectPath(safeKey);
@@ -61,15 +61,37 @@ export async function readStoredText(key: string): Promise<string> {
   return readFile(localObjectPath(safeKey), "utf8");
 }
 
-export async function storedObjectInfo(key: string): Promise<{ path: string; size: number } | { url: string }> {
+export async function copyStoredFile(key: string, target: string): Promise<void> {
+  const safeKey = normalizeKey(key);
+  await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+  if (storageDriver() === "oss") {
+    await (await getOssClient()).get(safeKey, target);
+    return;
+  }
+  await copyFile(localObjectPath(safeKey), target);
+}
+
+export async function storedObjectInfo(key: string, options: { private?: boolean } = {}): Promise<{ path: string; size: number } | { url: string }> {
   const safeKey = normalizeKey(key);
   if (storageDriver() === "oss") {
     const publicBaseUrl = String(process.env.OSS_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
-    if (publicBaseUrl) return { url: `${publicBaseUrl}/${safeKey.split("/").map(encodeURIComponent).join("/")}` };
+    if (publicBaseUrl && !options.private) return { url: `${publicBaseUrl}/${safeKey.split("/").map(encodeURIComponent).join("/")}` };
     return { url: (await getOssClient()).signatureUrl(safeKey, { expires: signedUrlSeconds(), method: "GET" }) };
   }
   const path = localObjectPath(safeKey);
   return { path, size: (await stat(path)).size };
+}
+
+export async function makeStoredPrefixPrivate(prefix: string): Promise<void> {
+  if (storageDriver() === "local") return;
+  const safePrefix = `${normalizeKey(prefix).replace(/\/+$/, "")}/`;
+  const client = await getOssClient();
+  let continuationToken: string | undefined;
+  do {
+    const result = await client.listV2({ prefix: safePrefix, "max-keys": 1000, ...(continuationToken ? { "continuation-token": continuationToken } : {}) });
+    for (const object of result.objects || []) await client.putACL(object.name, "private");
+    continuationToken = result.isTruncated ? result.nextContinuationToken : undefined;
+  } while (continuationToken);
 }
 
 export async function deleteStoredPrefix(prefix: string): Promise<void> {

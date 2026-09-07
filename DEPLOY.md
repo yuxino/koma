@@ -27,6 +27,9 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `ADMIN_PASSWORD` | Enables `/admin`; use a long random value |
 | `ANALYSIS_REQUIRE_ADMIN` | Optional; set `true` only when AI JSON generation and URL/upload submission should require the administrator session |
 | `KOMA_CONFIG_SECRET` | Stable random secret used to encrypt provider keys |
+| `KOMA_GITHUB_CLIENT_ID` | Client ID of the GitHub App used for workspace sign-in |
+| `KOMA_GITHUB_CLIENT_SECRET` | GitHub App client secret; server-only, never in the frontend |
+| `KOMA_GITHUB_CALLBACK_URL` | Exact registered callback, e.g. `https://koma.yuxino.cn/api/auth/github/callback` |
 | `DB_DRIVER` | `mysql` in production, or leave empty for local SQLite |
 | `DB_HOST` / `DB_PORT` | MySQL endpoint and port; keep the real endpoint in Secrets |
 | `DB_USER` / `DB_PASSWORD` | MySQL account; use a dedicated account limited to `koma.*` after initial setup |
@@ -42,6 +45,14 @@ Add these under **Settings → Secrets and variables → Actions**:
 
 `SERVER_HOST`, `SERVER_USER`, and `SERVER_PASSWORD` are all required. The manual workflow fails before copying files when any of them is missing.
 
+## GitHub sign-in
+
+Register a **GitHub App**, set its homepage to the Koma public URL, and register the exact `/api/auth/github/callback` URL. Leave wildcard redirects, device flow, and webhooks disabled. Keep expiring user tokens enabled. Login only needs the user's public GitHub identity: do not request repository, organization, email, or profile-write permissions. The app does not need to be installed on a repository. See GitHub's [login button guide](https://docs.github.com/en/apps/creating-github-apps/writing-code-for-a-github-app/building-a-login-with-github-button-with-a-github-app).
+
+Store these values as `KOMA_GITHUB_CLIENT_ID`, `KOMA_GITHUB_CLIENT_SECRET`, and `KOMA_GITHUB_CALLBACK_URL` in Actions Secrets; GitHub reserves the `GITHUB_` secret prefix. The workflow maps them to runtime `GITHUB_*` variables. They can also be set directly as `GITHUB_*` in the protected server `.env`. The deployment writer preserves existing values when an incoming secret is empty. For local development, register `http://localhost:5173/api/auth/github/callback` as an additional exact callback. Web submissions require GitHub sign-in; missing configuration disables that login path instead of reopening anonymous analysis. The local CLI continues to work without web login.
+
+Before the first account-workspace deployment, back up the Koma database, `.env`, and the previous `dist`/`dist-server` build to a private server directory. The migration adds account/session tables and ownership metadata without deleting jobs or media. Existing anonymous replay links remain compatible until their original browser explicitly transfers its own records into a signed-in account. Unowned records remain for administrators to manage; they are never assigned to the first account. Retain the backup until the migration and private-resource checks pass. After users create private account jobs, roll back only to a build that retains account access checks; an older public-replay build would expose those jobs by URL.
+
 ## Server Setup
 
 Install Node.js 22.23.2+, PM2, and nginx. The deployment workflow uses the same Node.js patch version for its checks and managed runtime.
@@ -56,7 +67,7 @@ Example nginx configuration:
 
 This is only the upstream HTTP portion. Before exposing Koma publicly, terminate TLS in front of nginx or add a certificate-backed `listen 443 ssl` server and redirect port 80 to HTTPS. Never send `/admin` credentials or session cookies over public plain HTTP.
 
-Setting `ADMIN_PASSWORD` protects `/admin` while visitor AI JSON generation and URL/upload analysis remain public. Set `ANALYSIS_REQUIRE_ADMIN=true` only for a private deployment.
+Setting `ADMIN_PASSWORD` protects `/admin` separately from GitHub workspace login. Set `ANALYSIS_REQUIRE_ADMIN=true` to additionally restrict analysis to administrators. A GitHub account never automatically gains administrator permissions.
 
 Authentication is not complete network isolation. Koma's URL importer does not yet comprehensively block redirects or hostnames that resolve to private or link-local addresses. Do not expose URL submission to untrusted users without an outbound network policy or a trusted URL allowlist. Rate limits reduce abuse volume but do not close this SSRF risk.
 

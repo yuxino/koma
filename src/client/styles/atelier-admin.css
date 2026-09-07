@@ -749,8 +749,14 @@
 }
 
 .admin-shell .admin-notice::before {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
   margin-right: 6px;
-  content: "●";
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+  content: "";
 }
 
 /* Job ledger */
@@ -882,10 +888,9 @@
   font-family: var(--font-mono);
 }
 
-.admin-shell .job-pipeline > i {
+.admin-shell .job-pipeline > .koma-icon {
+  justify-self: center;
   color: var(--muted);
-  font-style: normal;
-  text-align: center;
 }
 
 .admin-shell .job-pipeline > small {
@@ -1369,11 +1374,8 @@
   font-size: 8px;
 }
 
-.admin-shell .job-artifact-list i {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 17px;
-  font-style: normal;
+.admin-shell .job-artifact-list .koma-icon {
+  color: var(--ink-2);
 }
 
 .admin-shell .job-result-json {

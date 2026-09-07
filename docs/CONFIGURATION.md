@@ -1,6 +1,6 @@
 # Configuration
 
-Copy `.env.example` to `.env`. Without model credentials, Koma still runs the complete pipeline with mock data.
+Copy `.env.example` to `.env`. Without model credentials, Koma uses mock analysis data; Web submission still requires [GitHub sign-in](#github-sign-in).
 
 AI work is split into two independently configurable stages:
 
@@ -13,6 +13,26 @@ The two providers can be mixed; Koma is not tied to Qwen.
 Mock mode demonstrates summaries, chapters, and the timeline without inventing business data. Custom extraction therefore requires a real vision provider.
 
 AI JSON-shape generation normally uses one vision-provider request. If that response is malformed or fails shape/path validation, Koma makes one stricter repair request before returning an invalid-output error.
+
+## GitHub sign-in
+
+Web analysis requires a GitHub account, even when the AI providers use mock data. The local CLI is independent of Web authentication.
+
+Register a **GitHub App** for your deployment and configure its user authorization callback. Request no repository, organization, or account permissions, and disable webhooks; Koma only uses the authenticated public profile. A repository installation, App private key, and OAuth App are not needed for this login flow. See GitHub's [registration guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app) and [permission model](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `GITHUB_CLIENT_ID` | empty | GitHub App client ID, not its numeric App ID |
+| `GITHUB_CLIENT_SECRET` | empty | GitHub App client secret; server-side secret only |
+| `GITHUB_CALLBACK_URL` | empty | Exact registered callback ending in `/api/auth/github/callback` |
+
+For local `npm run dev`, register and set `http://localhost:5173/api/auth/github/callback`, then open the app at `http://localhost:5173`. Vite forwards `/api` to the server. Keep the hostname consistent; `localhost` and `127.0.0.1` do not share cookies. For production, use your HTTPS origin, for example `https://koma.yuxino.cn/api/auth/github/callback`. Callback URLs cannot contain credentials, a query, or a fragment; plain HTTP is accepted only for loopback development.
+
+When using the repository GitHub Actions deployment, create the Secrets as `KOMA_GITHUB_CLIENT_ID`, `KOMA_GITHUB_CLIENT_SECRET`, and `KOMA_GITHUB_CALLBACK_URL`; the workflow maps them to the runtime variables above. GitHub Actions reserves Secret names starting with `GITHUB_`. See [Deployment](../DEPLOY.md).
+
+Keep the client secret in the protected server environment or deployment secret store. Never put it in browser configuration or a `VITE_*` variable. Missing or invalid GitHub settings prevent new sign-ins; anonymous Web analysis is never enabled as a fallback. Configure providers separately for real analysis.
+
+Koma uses single-use, browser-bound OAuth state and PKCE S256. Its own HttpOnly session lasts seven days; GitHub access tokens are used for profile lookup and are not stored. See the [authentication API](API.md#authentication) for session and sign-out behavior.
 
 ## Provider presets
 
@@ -31,7 +51,7 @@ AI JSON-shape generation normally uses one vision-provider request. If that resp
 
 Override any preset with `ASR_MODEL`, `VISION_MODEL`, `ASR_BASE_URL`, or `VISION_BASE_URL`. A provider model rename does not require a code change.
 
-## Free-tier public demo
+## Free-tier demo
 
 The repository includes `.env.demo.example`:
 
@@ -53,7 +73,7 @@ This combination uses:
 
 Free services still require account keys; there is no dependable anonymous, unlimited AI endpoint. Keys stay on the Koma server and never reach the browser. Because account-level quotas are limited, the demo template defaults to three-minute videos, three submissions per IP per UTC day, and one concurrent job. Results are persistent, so administrators should review storage usage and delete unwanted demos from `/admin`.
 
-Set `ADMIN_PASSWORD` to enable the operations console. Visitor AI JSON generation and both analysis submission endpoints stay public by default; set `ANALYSIS_REQUIRE_ADMIN=true` only for a private single-user deployment. The daily limiter reduces request volume but is not authentication or an SSRF boundary.
+Configure GitHub sign-in for demo users and `ADMIN_PASSWORD` for the separate operations console. Set `ANALYSIS_REQUIRE_ADMIN=true` when analysis also requires the administrator session. The daily limiter reduces request volume but is not authentication or an SSRF boundary.
 
 The built-in rate limiter is intended for a single-node demo. Multi-instance deployments should rate-limit at the gateway or in shared storage. Before setting `TRUST_PROXY=true` behind nginx, make sure the proxy overwrites client-supplied `X-Forwarded-For`.
 
@@ -134,14 +154,14 @@ Legacy `ANALYSIS_PROVIDER=openai-compatible` remains accepted, but new deploymen
 
 ## Administration and database
 
-Set `ADMIN_PASSWORD` to enable `/admin`, where an administrator can change providers, models, base URLs, and API keys. Visitor AI JSON generation, URL analysis, and upload analysis remain public unless `ANALYSIS_REQUIRE_ADMIN=true`; that private mode reuses the administrator session. Keys are encrypted with AES-256-GCM before being written to the database; the browser only receives a last-four-character hint. Set a separate stable random `KOMA_CONFIG_SECRET`; when omitted, Koma falls back to `ADMIN_PASSWORD` as the encryption key.
+Set `ADMIN_PASSWORD` to enable `/admin`, where an administrator can change providers, models, base URLs, and API keys. AI JSON generation, URL analysis, and upload analysis always require GitHub sign-in. With `ANALYSIS_REQUIRE_ADMIN=true`, the caller also needs the separate administrator session. Keys are encrypted with AES-256-GCM before being written to the database; the browser only receives a last-four-character hint. Set a separate stable random `KOMA_CONFIG_SECRET`; when omitted, Koma falls back to `ADMIN_PASSWORD` as the encryption key.
 
 Local development uses `DB_DRIVER=sqlite` and `./data/koma.sqlite` by default. Production can use a dedicated MySQL database:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ADMIN_PASSWORD` | empty | Enables `/admin`; visitor analysis remains public unless separately protected |
-| `ANALYSIS_REQUIRE_ADMIN` | `false` | Set `true` to require the administrator session for AI JSON generation and URL/upload submission |
+| `ADMIN_PASSWORD` | empty | Enables the separate `/admin` console; does not replace GitHub sign-in |
+| `ANALYSIS_REQUIRE_ADMIN` | `false` | With `ADMIN_PASSWORD` configured, additionally requires its session for AI JSON generation, URL/upload submission, and retry |
 | `KOMA_CONFIG_SECRET` | `ADMIN_PASSWORD` | Provider-settings encryption secret; set it separately in production |
 | `DB_DRIVER` | `sqlite` | `sqlite` or `mysql` |
 | `KOMA_DATABASE_PATH` | `./data/koma.sqlite` | SQLite file path |
@@ -165,10 +185,12 @@ The database stores encrypted provider settings and complete JSON replay records
 | `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | empty | Server-only OSS credentials |
 | `OSS_BUCKET` | empty | OSS bucket |
 | `OSS_UPLOAD_PREFIX` | `koma` | Namespace; jobs use `koma/jobs/<id>/` |
-| `OSS_PUBLIC_BASE_URL` | empty | Optional trusted public/CDN base URL; otherwise signed URLs are used |
+| `OSS_PUBLIC_BASE_URL` | empty | Leave empty for private workspaces; job downloads ignore this override and use signed URLs |
 | `OSS_SIGNED_URL_SECONDS` | `900` | Signed replay URL lifetime, capped at one hour |
 
-Public job links are permanent and read-only for anyone who only has the link. The submitting browser can list and delete its own jobs through an HttpOnly anonymous identity; `/admin` can manage every job. Permanent deletion removes the task and its complete storage prefix.
+New jobs belong to the signed-in GitHub account. Replay, video, frames, and artifacts require that account or an administrator; owning a replay URL grants no access. Unclaimed legacy replay links retain their previous read-only access until their browser owner explicitly claims them. See [migration rules](ADMIN.md#existing-jobs-and-migration). Permanent deletion removes the task and its complete storage prefix.
+
+Koma explicitly writes new OSS objects with a private ACL and privatizes a legacy job prefix before claiming it; shared bucket permissions stay unchanged. Leave `OSS_PUBLIC_BASE_URL` empty. Job downloads always check access and use signed URLs, even if that override is configured. Anyone holding a signed URL can use it until it expires. Claim cannot recall previously downloaded or cached public content, and an independently configured public CDN must not bypass origin-object access.
 
 ## Processing pipeline
 

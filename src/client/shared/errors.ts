@@ -1,9 +1,15 @@
 // 服务端错误消息是中文写死的，英文界面下原样展示会很突兀。
-// 这里按消息特征做中→英映射；映射不到时退回通用文案，避免英文用户看到一整段中文。
+// 这里按消息特征把中文映射到英文；映射不到时退回通用文案，避免英文用户看到一整段中文。
 
 type Language = "en" | "zh";
 
 const translations: Array<[RegExp, string]> = [
+  [/请先使用 GitHub 登录/, "Sign in with GitHub to continue."],
+  [/用户请求校验失败/, "Refresh Koma and try again. Your account request could not be verified."],
+  [/暂时无法保护旧任务的文件/, "The older files could not be made private. No jobs were moved. Please try again later."],
+  [/只有失败的任务可以重试/, "Only failed jobs can be retried."],
+  [/原视频已不可用|暂时无法读取原视频/, "The original video is unavailable. Upload it again or paste a video link."],
+  [/登录尝试过多/, "Too many sign-in attempts. Please try again later."],
   [/公开演示次数已经用完/, "Today's public demo allowance has been used. Try again tomorrow or configure your own model keys locally."],
   [/请先登录管理后台|管理员登录已失效/, "Sign in as the administrator before creating an AI JSON shape or starting an analysis."],
   [/管理请求校验失败/, "Refresh Koma and try again. The administrator request check was missing."],
