@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { contentDisposition } from "./artifacts.js";
 
 const oss = vi.hoisted(() => ({ put: vi.fn(), listV2: vi.fn(), putACL: vi.fn(), signatureUrl: vi.fn(), get: vi.fn() }));
 vi.mock("ali-oss", () => ({ default: class { put = oss.put; listV2 = oss.listV2; putACL = oss.putACL; signatureUrl = oss.signatureUrl; get = oss.get; } }));
@@ -25,6 +26,33 @@ describe("private OSS object access", () => {
     vi.stubEnv("OSS_PUBLIC_BASE_URL", "https://public.example");
     oss.signatureUrl.mockReturnValue("https://signed.example/short-lived");
     expect(await module.storedObjectInfo("koma/jobs/one/video.mp4", { private: true })).toEqual({ url: "https://signed.example/short-lived" });
+    expect(oss.signatureUrl).toHaveBeenCalledOnce();
+  });
+
+  it.each(["report.md", "工作区笔记 (复习).md"])("signs the attachment response header for %s instead of navigating to inline text", async (filename) => {
+    const module = await storage();
+    vi.stubEnv("OSS_PUBLIC_BASE_URL", "https://public.example");
+    oss.signatureUrl.mockReturnValue("https://signed.example/download");
+    const disposition = contentDisposition(filename);
+    await module.storedObjectInfo("koma/jobs/one/report.md", { private: true, contentDisposition: disposition });
+    expect(oss.signatureUrl).toHaveBeenCalledWith("koma/jobs/one/report.md", expect.objectContaining({
+      method: "GET", response: { "content-disposition": disposition }
+    }));
+    expect(disposition).toMatch(/^attachment;/);
+    expect(decodeURIComponent(disposition.split("filename*=UTF-8''")[1])).toBe(filename);
+  });
+
+  it("keeps video and frame signed URLs inline without download overrides", async () => {
+    const module = await storage();
+    for (const key of ["koma/jobs/one/video.mp4", "koma/jobs/one/frame.jpg"]) await module.storedObjectInfo(key, { private: true });
+    expect(oss.signatureUrl).toHaveBeenCalledTimes(2);
+    for (const call of oss.signatureUrl.mock.calls) expect(call[1]).not.toHaveProperty("response");
+  });
+
+  it("signs attachment overrides even when callers use a configured public base URL", async () => {
+    const module = await storage();
+    vi.stubEnv("OSS_PUBLIC_BASE_URL", "https://public.example");
+    await module.storedObjectInfo("koma/jobs/one/report.md", { contentDisposition: contentDisposition("report.md") });
     expect(oss.signatureUrl).toHaveBeenCalledOnce();
   });
 

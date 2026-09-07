@@ -22,6 +22,15 @@ describe("artifact normalization", () => {
     expect(missingArtifactFormats(artifacts, ["markdown", "csv"])).toEqual(["csv"]);
   });
 
+  it("encodes Unicode and punctuation without injecting response headers", () => {
+    const filename = "工作区笔记📝 'review'.md\r\nX-Injected: yes";
+    const header = contentDisposition(filename);
+    expect(header).not.toMatch(/[\r\n]/);
+    expect(header).toMatch(/^attachment; filename="[a-zA-Z0-9._-]+"; filename\*=UTF-8''/);
+    expect(decodeURIComponent(header.split("filename*=UTF-8''")[1])).toBe(filename);
+    expect(header).toContain("%27review%27");
+  });
+
   it("builds a safe content-disposition header", () => {
     const header = contentDisposition("中文字幕.srt");
     expect(header).toContain('filename="____.srt"');

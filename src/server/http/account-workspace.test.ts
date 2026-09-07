@@ -108,6 +108,8 @@ describe("account workspace HTTP boundaries", () => {
     const owner = await get(`/api/jobs/${own}${suffix}`, cookieA);
     expect(owner.status).toBe(200);
     expect(owner.headers.get("cache-control")).toContain("no-store");
+    if (suffix === "/artifacts/0") expect(owner.headers.get("content-disposition")).toMatch(/^attachment; filename="report.json"/);
+    else expect(owner.headers.get("content-disposition")).toBeNull();
     const login = await fetch(`${baseUrl}/api/admin/login`, { method: "POST", headers: { "x-koma-admin": "1", "content-type": "application/json" }, body: JSON.stringify({ password: "test-admin" }) });
     const adminCookie = login.headers.get("set-cookie")!.split(";", 1)[0];
     expect((await get(`/api/jobs/${own}${suffix}`, adminCookie)).status).toBe(200);

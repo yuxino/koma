@@ -71,12 +71,16 @@ export async function copyStoredFile(key: string, target: string): Promise<void>
   await copyFile(localObjectPath(safeKey), target);
 }
 
-export async function storedObjectInfo(key: string, options: { private?: boolean } = {}): Promise<{ path: string; size: number } | { url: string }> {
+export async function storedObjectInfo(key: string, options: { private?: boolean; contentDisposition?: string } = {}): Promise<{ path: string; size: number } | { url: string }> {
   const safeKey = normalizeKey(key);
   if (storageDriver() === "oss") {
     const publicBaseUrl = String(process.env.OSS_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
-    if (publicBaseUrl && !options.private) return { url: `${publicBaseUrl}/${safeKey.split("/").map(encodeURIComponent).join("/")}` };
-    return { url: (await getOssClient()).signatureUrl(safeKey, { expires: signedUrlSeconds(), method: "GET" }) };
+    if (publicBaseUrl && !options.private && !options.contentDisposition) return { url: `${publicBaseUrl}/${safeKey.split("/").map(encodeURIComponent).join("/")}` };
+    return { url: (await getOssClient()).signatureUrl(safeKey, {
+      expires: signedUrlSeconds(),
+      method: "GET",
+      ...(options.contentDisposition ? { response: { "content-disposition": options.contentDisposition } } : {})
+    }) };
   }
   const path = localObjectPath(safeKey);
   return { path, size: (await stat(path)).size };

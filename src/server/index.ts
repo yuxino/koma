@@ -384,7 +384,7 @@ app.get("/api/jobs/:id/video", async (request: FastifyRequest<{ Params: { id: st
 
 async function sendStoredObject(request: FastifyRequest, reply: FastifyReply, key: string, mimeType: string, disposition?: string) {
   try {
-    const object = await storedObjectInfo(key, { private: true });
+    const object = await storedObjectInfo(key, { private: true, contentDisposition: disposition });
     if ("url" in object) {
       return reply.header("cache-control", "no-store").redirect(object.url);
     }
