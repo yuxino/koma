@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GITHUB_STAR_SNAPSHOT, readGithubStarSnapshot, refreshGithubStars } from "../../shared/github-stars.js";
+import { GITHUB_STAR_SNAPSHOT, refreshGithubStars } from "../../shared/github-stars.js";
 import { GithubMark } from "./WelcomeScreen.js";
 
 export function GithubStarLink({ language }: { language: "zh" | "en" }) {
@@ -7,10 +7,7 @@ export function GithubStarLink({ language }: { language: "zh" | "en" }) {
   const [snapshot, setSnapshot] = useState(GITHUB_STAR_SNAPSHOT);
   useEffect(() => {
     const controller = new AbortController();
-    let storage: Storage | undefined;
-    try { storage = window.localStorage; } catch { /* A blocked cache does not block GitHub. */ }
-    setSnapshot(readGithubStarSnapshot(storage));
-    void refreshGithubStars({ storage, signal: controller.signal }).then(next => {
+    void refreshGithubStars({ signal: controller.signal }).then(next => {
       if (!controller.signal.aborted) setSnapshot(next);
     });
     return () => controller.abort();
