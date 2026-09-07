@@ -19,7 +19,8 @@ import { formatTime } from "../../shared/format.js";
 import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
 import { progressStepStates, translateProgressDetail } from "../../shared/progress.js";
 import { translateTagCategory } from "../../shared/analysis-labels.js";
-import { GithubMark, WelcomeScreen } from "./WelcomeScreen.js";
+import { WelcomeScreen } from "./WelcomeScreen.js";
+import { GithubStarLink } from "./GithubStarLink.js";
 import { Icon } from "../../shared/Icon.js";
 import { classifyMissingJobAccess, createWorkspaceRequestGuard, type AccessSession } from "./workspace-access.js";
 import { WorkspaceLibrary } from "./WorkspaceLibrary.js";
@@ -1098,7 +1099,7 @@ function App() {
   return <div className={`app-shell companion-ui${job?.result ? " has-result" : ""}`}>
     <header className="site-header"><div className="header-inner"><Brand onClick={job || showHistory ? goHome : undefined} label={t.backHome} />
       {authenticated && <nav className="workspace-nav" aria-label={language === "zh" ? "工作区导航" : "Workspace navigation"}><button type="button" className={!libraryActive ? "selected" : ""} aria-current={!libraryActive ? "page" : undefined} onClick={goHome}>{language === "zh" ? "新分析" : "New analysis"}</button><button type="button" className={libraryActive ? "selected" : ""} aria-current={libraryActive ? "page" : undefined} onClick={enterLibrary}>{language === "zh" ? "资料库" : "Library"}{Boolean(auth.session?.legacyJobCount) && <i aria-label={language === "zh" ? "有旧任务可找回" : "Older jobs available"} />}</button></nav>}
-      <div className="header-actions"><a className="github-star" href="https://github.com/yuxino/koma" target="_blank" rel="noreferrer" aria-label={language === "zh" ? "在 GitHub 上为 Koma 点 Star" : "Star Koma on GitHub"}><GithubMark /><span>GitHub · Star</span></a><button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
+      <div className="header-actions"><GithubStarLink language={language} /><button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
       {authenticated && <span className="account-identity">{auth.session?.user?.avatarUrl && <img src={auth.session.user.avatarUrl} alt="" referrerPolicy="no-referrer" />}<span>{auth.session?.user?.login}</span></span>}
       <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" disabled={generatingSchema} aria-label={language === "zh" ? "更多选项" : "More options"} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a>{authenticated && <button type="button" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? (language === "zh" ? "正在退出…" : "Signing out…") : (language === "zh" ? "退出登录" : "Sign out")}</button>}</div>}</div>
     </div></div></header>

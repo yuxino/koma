@@ -2,9 +2,11 @@
 .app-shell.companion-ui { --result-width: min(calc(100% - 72px), 1360px); --companion-header-height: 80px; }
 .app-shell.companion-ui.has-result .header-inner,
 .app-shell.companion-ui .result-layout { width: var(--result-width); }
-.app-shell.companion-ui .github-star { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 22px; color: var(--ink); font-size: 12px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+.app-shell.companion-ui .github-star { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 6px 0 12px; border: 1px solid var(--line); border-radius: 22px; color: var(--ink); background: var(--surface); font-size: 12px; font-weight: 600; white-space: nowrap; text-decoration: none; transition: border-color 160ms ease, background-color 160ms ease; }
 .app-shell.companion-ui .github-star:hover { border-color: var(--line-strong); background: var(--paper-2); }
-.app-shell.companion-ui .github-star > svg { width: 17px; height: 17px; }
+.app-shell.companion-ui .github-star-label { display: inline-flex; align-items: center; gap: 6px; }
+.app-shell.companion-ui .github-star-label > svg { width: 16px; height: 16px; }
+.app-shell.companion-ui .github-star-count { display: grid; place-items: center; min-width: 25px; height: 25px; padding-inline: 7px; border-radius: 14px; color: #fff; background: #30302e; font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1; }
 @media (max-width: 1120px) {
   .app-shell.companion-ui { --result-width: min(calc(100% - 64px), 860px); }
 }
@@ -24,8 +26,11 @@
 }
 @media (max-width: 480px) {
   .app-shell.companion-ui { --result-width: calc(100% - 32px); }
-  .app-shell.companion-ui .github-star { gap: 5px; padding-inline: 9px; font-size: 11px; }
+  .app-shell.companion-ui .github-star { gap: 8px; padding-left: 10px; font-size: 11px; }
 }
 @media (max-width: 380px) {
   .app-shell.companion-ui .brand-lockup > .companion-portrait { display: block; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.companion-ui .github-star { transition: none; }
 }
