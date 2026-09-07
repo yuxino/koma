@@ -1,6 +1,6 @@
 # Koma companion portrait
 
-[`public/koma-ponytail-portrait.webp`](../public/koma-ponytail-portrait.webp) is the current character for the public workspace, welcome, loading, progress, help, and empty states. The administration console, favicon, and README use the same new portrait.
+[`public/koma-ponytail-portrait.webp`](../public/koma-ponytail-portrait.webp) is the current character for the public workspace, welcome, loading, progress, help, and empty states. The separate [avatar logo](logo-assets.md) is used in the public page header, administration console, GitHub README, and favicon. The page illustration continues to show the clapperboard; the logo uses a new face-focused composition without hands or props.
 
 The user requested a cuter, younger-looking single-ponytail character and explicitly referenced Kiri. The adopted Kiri website portrait supplied the round face, large open eyes, soft linework, and close framing. Koma retains milky-white hair tied in one high ponytail with one black ribbon, gray-brown eyes, an ivory sweater, black pinafore straps, and a blank film clapperboard held in both hands. This is a fully clothed head-and-shoulders illustration.
 
@@ -20,7 +20,7 @@ The user requested a cuter, younger-looking single-ponytail character and explic
 
 The built-in `image_gen.imagegen` tool generated this new portrait on 2026-09-07 with Kiri's current `kiri-portrait.webp` as a style reference. The reference SHA-256 is `86229f96176ac61cd094e4e03c3a99735a24b533f81ff24ad194517ff01328f2`. The original generated PNG, the fixed reference copy, and detailed checks are retained locally under `work/qa/`; the application uses the repository-owned WebP above.
 
-The artwork is already a close portrait. Public placements fit it within small rounded frames, retaining the face, bow, hands, and ponytail instead of enlarging a full-body drawing. Small header icons use a round frame. The opaque background is close to the neutral page background; no filters, recoloring, or alpha extraction are applied. Hover and progress entrance motion respect reduced-motion preferences.
+The artwork is already a close portrait. Public placements fit it within small rounded frames, retaining the face, bow, hands, and ponytail instead of enlarging a full-body drawing. The separate header logo uses a round frame. The opaque background is close to the neutral page background; no filters, recoloring, or alpha extraction are applied. Hover and progress entrance motion respect reduced-motion preferences.
 
 Earlier character files, including `koma-companion-girl.png`, remain historical assets and are no longer active UI references. Current layout rules are documented in the [companion refresh plan](plans/2026-09-07-companion-ui-refresh.md) and [design system](../DESIGN.md). Asset metadata does not establish browser, interaction, or deployment acceptance; those checks are recorded separately.
 

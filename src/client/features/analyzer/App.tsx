@@ -517,8 +517,8 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
 
 function Brand({ onClick, label }: { onClick?: () => void; label?: string }) {
   return onClick
-    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><CompanionPortrait className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>VIDEO COMPANION</span></span></button>
-    : <div className="brand-lockup"><CompanionPortrait className="brand-icon" /><div><strong>Koma</strong><span>VIDEO COMPANION</span></div></div>;
+    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><CompanionPortrait className="brand-icon" variant="logo" /><span className="brand-text"><strong>Koma</strong><span>VIDEO COMPANION</span></span></button>
+    : <div className="brand-lockup"><CompanionPortrait className="brand-icon" variant="logo" /><div><strong>Koma</strong><span>VIDEO COMPANION</span></div></div>;
 }
 
 function App() {

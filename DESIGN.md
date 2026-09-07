@@ -81,4 +81,6 @@ GitHub 登录后的新任务归属账号，跨浏览器恢复；结果与文件�
 
 本轮视觉改版不增加服务端能力，也不更换 Provider 配置。API 及迁移约定见 [GitHub 工作区决策](docs/decisions/0003-github-workspaces.md)。
 
-当前角色资产为 [`public/koma-ponytail-portrait.webp`](public/koma-ponytail-portrait.webp)，采用极浅中性实底的原生近景。图片以完整近景配小圆角展示，小尺寸品牌头像使用圆框；不再把全身图放大裁切。生成参考、实际尺寸与完整提示词见[角色素材说明](docs/visual-assets.md)。
+当前角色资产为 [`public/koma-ponytail-portrait.webp`](public/koma-ponytail-portrait.webp)，采用极浅中性实底的原生近景。图片以完整近景配小圆角展示，小尺寸品牌头像使用单独绘制的 [`public/koma-ponytail-logo.png`](public/koma-ponytail-logo.png)，聚焦脸部并使用圆框；浏览器图标使用同款 64px PNG。页面插画与 Logo 的用途分开，不再把全身图放大裁切。生成参考、实际尺寸与完整提示词见[角色素材说明](docs/visual-assets.md)。
+
+独立头像 Logo 的生成提示词、尺寸与使用范围见 [Logo 素材说明](docs/logo-assets.md)。
