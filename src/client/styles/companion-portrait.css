@@ -1,0 +1,74 @@
+/* Native close-up artwork: preserve the face, bow, and single ponytail. */
+.app-shell.companion-ui .companion-portrait {
+  display: block;
+  position: relative;
+  flex: 0 0 auto;
+  width: 150px;
+  height: 150px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  transform: none;
+}
+.app-shell.companion-ui .companion-portrait > img {
+  display: block;
+  position: static;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  object-fit: cover;
+  object-position: center top;
+  transform: none;
+  transform-origin: center;
+  animation: none;
+  transition: none;
+}
+.app-shell.companion-ui .welcome-character > .companion-portrait {
+  width: 335px;
+  height: 335px;
+  margin-top: 12px;
+  transition: transform 300ms ease;
+}
+.app-shell.companion-ui .welcome-character:hover > .companion-portrait { transform: translateY(-3px) rotate(1deg); }
+.app-shell.companion-ui .compose-character > .companion-portrait { width: 230px; height: 230px; margin: 0; }
+.app-shell.companion-ui .compose-character > .compose-greeting { z-index: 1; }
+.app-shell.companion-ui .brand-lockup > .companion-portrait { width: 46px; height: 46px; border-radius: 50%; }
+.app-shell.companion-ui .session-loading > .companion-portrait { width: 130px; height: 130px; }
+.app-shell.companion-ui .library-empty > .companion-portrait { width: 190px; height: 190px; margin: 0 auto 20px; }
+.app-shell.companion-ui .progress-mascot { height: auto; }
+.app-shell.companion-ui .progress-mascot > .companion-portrait { width: 100%; height: auto; aspect-ratio: 1; animation: companion-settle 420ms ease-out both; }
+.app-shell.companion-ui .info-modal-head > .companion-portrait { width: 64px; height: 64px; }
+
+@media (max-width: 1050px) {
+  .app-shell.companion-ui .welcome-character > .companion-portrait { width: 290px; height: 290px; }
+}
+@media (max-width: 760px) {
+  .app-shell.companion-ui .welcome-character > .companion-portrait { width: 235px; height: 235px; }
+  .app-shell.companion-ui .compose-character > .companion-portrait { width: 185px; height: 185px; }
+  .app-shell.companion-ui .brand-lockup > .companion-portrait { width: 37px; height: 37px; }
+}
+@media (max-width: 480px) {
+  .app-shell.companion-ui .welcome-character > .companion-portrait { width: 235px; height: 235px; }
+  .app-shell.companion-ui .brand-lockup > .companion-portrait { width: 30px; height: 34px; }
+  .app-shell.companion-ui .library-empty > .companion-portrait { width: 170px; height: 170px; }
+  .app-shell.companion-ui .info-modal-head > .companion-portrait { width: 50px; height: 50px; }
+}
+@media (max-width: 540px) {
+  .app-shell.companion-ui .compose-character { height: 132px; }
+  .app-shell.companion-ui .compose-character > .companion-portrait { width: 98px; height: 108px; }
+  .app-shell.companion-ui .compose-character > .compose-greeting { display: none; }
+}
+@media (max-width: 380px) {
+  .app-shell.companion-ui .brand-lockup > .companion-portrait { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.companion-ui .welcome-character > .companion-portrait,
+  .app-shell.companion-ui .welcome-character:hover > .companion-portrait,
+  .app-shell.companion-ui .progress-mascot > .companion-portrait { animation: none; transition: none; transform: none; }
+}

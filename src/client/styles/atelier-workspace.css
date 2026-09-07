@@ -59,7 +59,7 @@
 .app-shell .compose-aside > p { max-width: 250px; margin: 0; font-size: 14px; line-height: 1.8; color: var(--ink-2); }
 .app-shell .compose-character { position: relative; height: 190px; margin: 12px 0 22px; border-bottom: 1px solid var(--line); }
 .app-shell .compose-character img { width: 190px; height: 180px; margin-left: auto; object-fit: contain; }
-.app-shell .compose-character > span { position: absolute; left: 0; bottom: 17px; max-width: 105px; font-size: 11px; line-height: 1.8; color: var(--muted); }
+.app-shell .compose-character > .compose-greeting { position: absolute; left: 0; bottom: 17px; max-width: 105px; font-size: 11px; line-height: 1.8; color: var(--muted); }
 .app-shell .compose-guide > div { display: flex; align-items: start; gap: 12px; margin-bottom: 12px; }
 .app-shell .compose-guide > div > span { padding-top: 3px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
 .app-shell .compose-guide p { margin: 0; color: var(--ink-2); font-size: 12px; line-height: 1.7; }
@@ -193,7 +193,7 @@
   .app-shell .compose-aside > p { max-width: 80%; font-size: 13px; }
   .app-shell .compose-character { position: absolute; top: -8px; right: 0; width: 90px; height: 100px; margin: 0; border: 0; pointer-events: none; }
   .app-shell .compose-character img { width: 90px; height: 100px; }
-  .app-shell .compose-character > span, .app-shell .compose-guide, .app-shell .compose-library-link { display: none; }
+  .app-shell .compose-character > .compose-greeting, .app-shell .compose-guide, .app-shell .compose-library-link { display: none; }
   .app-shell .workspace-compose .capture-card { padding: 0; border: 0; }
   .app-shell .workspace-compose .capture-card-head { display: none; }
   .app-shell .workspace-library { width: calc(100% - 40px); padding-top: 32px; }

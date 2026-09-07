@@ -4,7 +4,7 @@ The user requested a cuter, newly drawn anime companion and a full UI refresh af
 
 ## Direction
 
-Use soft black, white, and neutral gray, with a fresh expressive twin-tail companion illustration. Replace condensed oversized display text and rigid workbench lines with normal-proportion typography, rounded controls, generous spacing, and clearly separated working areas. The new illustration is `public/koma-companion-girl.png`; earlier character assets are historical.
+Use soft black, white, and neutral gray, with a fresh single-ponytail face-and-shoulders companion portrait inspired by the current Kiri website’s round face, large eyes, and soft linework. Replace condensed oversized display text and rigid workbench lines with normal-proportion typography, rounded controls, generous spacing, and clearly separated working areas. The new illustration is `public/koma-ponytail-portrait.webp`; earlier character assets are historical.
 
 The welcome page introduces the companion and three concrete capabilities. The signed-in composer uses a compact greeting above a two-column source/request sheet on desktop and a single reading order on mobile. Library entries remain readable rows. Results retain the full title, a balanced video/transcript layout, clear downloads, and quiet summaries.
 

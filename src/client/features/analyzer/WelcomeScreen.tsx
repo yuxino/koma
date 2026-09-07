@@ -1,3 +1,4 @@
+import { CompanionPortrait } from "./CompanionPortrait.js";
 import { Icon } from "../../shared/Icon.js";
 
 export function GithubMark() {
@@ -23,7 +24,7 @@ export function WelcomeScreen({ language, enabled, unavailable, expired, error, 
       {(expired || callbackError || error) && <div className="welcome-error" role="alert">{(expired || authError === "expired") ? (zh ? "登录已过期。重新登录后，就能继续查看自己的视频。" : "Your session expired. Sign in again to return to your videos.") : authError === "unavailable" ? (zh ? "GitHub 登录暂时没有连接成功，请稍后重试。" : "GitHub sign-in could not be reached. Please try again shortly.") : callbackError ? (zh ? "这次登录没有完成，请重新通过 GitHub 登录。" : "Sign-in wasn’t completed. Please try GitHub again.") : error}</div>}
       <div className="welcome-account-note"><Icon name="corner-down-right" size={21} /><p>{zh ? "视频归你，记录也归你。换个浏览器登录，依然能找到。" : "Your videos, your notes. Sign in on another browser and pick up where you left off."}</p></div>
     </div>
-    <aside className="welcome-aside"><div className="welcome-character"><span className="character-greeting">{zh ? "今天，一起看点什么？" : "What shall we watch today?"}</span><img src="/koma-companion-girl.png" alt="" fetchPriority="high" /><span className="character-signature">{zh ? "Koma，随时陪你逐帧整理。" : "Koma, your frame-by-frame friend."}</span></div></aside>
+    <aside className="welcome-aside"><div className="welcome-character"><span className="character-greeting">{zh ? "今天，一起看点什么？" : "What shall we watch today?"}</span><CompanionPortrait priority /><span className="character-signature">{zh ? "Koma，随时陪你逐帧整理。" : "Koma, your frame-by-frame friend."}</span></div></aside>
     <div className="welcome-capabilities">{(zh ? [["01", "重点，我来整理", "摘要与章节，把长视频变成读得下去的笔记。"], ["02", "想重看，马上找到", "搜索字幕，点一下就回到原片中的那一刻。"], ["03", "记下的，都能带走", "笔记、字幕、自定义数据，下载后继续使用。"]] : [["01", "The ideas, all together", "Summaries and chapters turn long videos into readable notes."], ["02", "Back to that moment", "Search a line and jump straight to where it happened."], ["03", "A little more to keep", "Download your notes, subtitles, and custom data."]]).map(([index, title, description]) => <div key={index}><span>{index}</span><div><h2>{title}</h2><p>{description}</p></div></div>)}</div>
     <footer className="welcome-footer"><span>LITTLE MOMENTS, WORTH KEEPING.</span><span>{zh ? "视频理解 · 个人资料库" : "VIDEO NOTES · YOUR OWN LIBRARY"}</span></footer>
   </section>;

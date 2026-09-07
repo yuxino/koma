@@ -87,7 +87,7 @@ html:has(.companion-ui), body:has(.companion-ui) { background: #fafafa; }
 .app-shell.companion-ui .compose-library-link:hover > span:last-child { transform: none; }
 .app-shell.companion-ui .compose-character { display: flex; position: relative; top: auto; right: auto; width: auto; height: 230px; margin: 0; align-items: center; justify-content: flex-end; border: 0; pointer-events: auto; }
 .app-shell.companion-ui .compose-character img { width: 230px; height: 230px; margin: 0; object-fit: contain; }
-.app-shell.companion-ui .compose-character > span { position: absolute; top: 22px; bottom: auto; left: -76px; max-width: 150px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 18px 18px 4px 18px; color: var(--ink-2); background: #fff; font-size: 11px; line-height: 1.6; transform: rotate(-4deg); }
+.app-shell.companion-ui .compose-character > .compose-greeting { position: absolute; top: 22px; bottom: auto; left: -76px; max-width: 150px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 18px 18px 4px 18px; color: var(--ink-2); background: #fff; font-size: 11px; line-height: 1.6; transform: rotate(-4deg); }
 .app-shell.companion-ui .workspace-compose .capture-card { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 0 34px; margin: 0; padding: 28px 32px 24px; border: 1px solid var(--line); border-radius: 24px; background: #fff; box-shadow: none; }
 .app-shell.companion-ui .workspace-compose .capture-card-head { display: flex; grid-column: 1 / -1; align-items: center; margin: 0 0 25px; padding: 0 0 22px; border-bottom: 1px solid var(--line); }
 .app-shell.companion-ui .workspace-compose .capture-card-head h2 { margin-top: 5px; font-family: var(--font-ui); font-size: 20px; font-weight: 650; letter-spacing: -.03em; }
@@ -182,7 +182,7 @@ html:has(.companion-ui), body:has(.companion-ui) { background: #fafafa; }
   .app-shell.companion-ui .compose-intro > p { max-width: 330px; font-size: 13px; }
   .app-shell.companion-ui .compose-character { height: 185px; }
   .app-shell.companion-ui .compose-character img { width: 190px; height: 185px; }
-  .app-shell.companion-ui .compose-character > span { left: -4px; top: -8px; max-width: 150px; padding: 7px 10px; font-size: 10px; }
+  .app-shell.companion-ui .compose-character > .compose-greeting { left: -4px; top: -8px; max-width: 150px; padding: 7px 10px; font-size: 10px; }
   .app-shell.companion-ui .workspace-compose .capture-card { display: block; padding: 23px; }
   .app-shell.companion-ui .workspace-compose .capture-card-head { margin-bottom: 23px; padding-bottom: 18px; }
   .app-shell.companion-ui .capture-journey { display: none; }
@@ -227,7 +227,7 @@ html:has(.companion-ui), body:has(.companion-ui) { background: #fafafa; }
   .app-shell.companion-ui .compose-library-link { font-size: 11px; }
   .app-shell.companion-ui .compose-character { height: 160px; pointer-events: none; }
   .app-shell.companion-ui .compose-character img { width: 132px; max-width: none; height: 155px; margin-left: -14px; }
-  .app-shell.companion-ui .compose-character > span { display: none; }
+  .app-shell.companion-ui .compose-character > .compose-greeting { display: none; }
   .app-shell.companion-ui .workspace-compose .capture-card { padding: 21px 16px; border-radius: 19px; }
   .app-shell.companion-ui .workspace-compose .capture-card-head h2 { font-size: 18px; }
   .app-shell.companion-ui .workspace-compose .workbench-section-label { font-size: 14px; }
