@@ -1,23 +1,27 @@
 # Koma avatar logo
 
-Koma uses two distinct illustrations of the same single-ponytail character. The [page portrait](visual-assets.md) keeps the hands and clapperboard. The avatar logo was drawn separately with a larger round face, clearer eyes, one black bow, and an ivory collar for small placements.
+Koma uses two distinct illustrations of the same single-ponytail character. The [page portrait](visual-assets.md) keeps the hands and clapperboard. The avatar uses the exact round portrait selected by the user on 2026-09-07, with the original face, hair, bow and ivory collar preserved.
 
-- `public/koma-ponytail-logo.png`: public page header, administration header and login, and both GitHub README headers.
-- `public/koma-ponytail-favicon.png`: the browser tab icon, declared as 64 × 64 PNG in `index.html`.
-- The welcome, composer, loading, empty, help and progress illustrations continue to use `public/koma-ponytail-portrait.webp`.
+- `public/koma-logo-round.png`: public header, administration header and login, and both GitHub README headers.
+- `public/koma-favicon-round.png`: browser tab icon, declared as 64 × 64 PNG in `index.html`.
+- Welcome, composer, loading, empty, help and progress illustrations keep `public/koma-ponytail-portrait.webp` unchanged.
 
 ## Verified assets
 
 | File | Dimensions | Bytes | SHA-256 |
 | --- | --- | --- | --- |
-| `public/koma-ponytail-logo.png` | 512 × 512 | 347,545 | `c43b49a1cbb35f36142dd96e371b529a3781bdfbee89e5a2ca489ad84248676c` |
-| `public/koma-ponytail-favicon.png` | 64 × 64 | 6,941 | `2f9c802f8f741e840e0ca5f26bf5202b571c2efc6139e1fba80523f6fe1405a2` |
+| `public/koma-logo-round.png` | 512 × 512 | 363,038 | `e4042c29ecde86b680ca01e15ddf0f3639031a036e09c0d7c6b355d6a36d97b9` |
+| `public/koma-favicon-round.png` | 64 × 64 | 8,429 | `bcba6b84880cd336b22b186a04e3a96d8c1938eea1923ca7f8f2819456d6f5fe` |
 
-Both delivery files are RGB PNG with an intentionally opaque very pale neutral background. They were resized from the newly generated 1254 × 1254 logo; no manual repainting, recoloring, or background removal was applied. They are different sizes of the same logo, not additional character designs.
+Both delivery files are RGBA PNGs with real transparency outside the circular portrait. The supplied 1254 × 1254 image contained a baked checkerboard outside the circle. A centered circular alpha mask (center 626.5, 626.5; radius 610 pixels; one-pixel antialias edge) removes that area without repainting or changing RGB pixels before resizing. The circular interior keeps its original pale backdrop. This is a crop of the selected image, not a newly generated character.
 
-The built-in `image_gen.imagegen` tool created the new logo on 2026-09-07 using the adopted Koma page portrait as the character reference (SHA-256 `e123b8e82b71f933878158837269959304771045b2ce3df0d7704440a7f8a26e`). The source PNG is 1,546,855 bytes with SHA-256 `f6e4b6256f705701303c3cab96f0a1d28c1efc636a349d8ec5dd14610a840295`; the source, metadata, and exact prompt are retained under local `work/qa/`. Active assets are stored in the repository's `public/` directory. Historical character files remain inactive.
+The selected source SHA-256 is `d32d1934b1156c670078da19dae4f64a9de1a78261bb473b90d39e1019997595`. Local source and alpha inspection records remain under `work/qa/`. Both exports passed transparent-corner, circular-boundary and opaque-interior checks. Previous opaque logo assets remain historical and inactive.
 
-## Generation prompt
+## Historical generation
+
+The previous separate avatar was created with the built-in `image_gen.imagegen` tool on 2026-09-07 using the page portrait as its character reference. Its original source SHA-256 was `f6e4b6256f705701303c3cab96f0a1d28c1efc636a349d8ec5dd14610a840295`. That opaque avatar is superseded by the user-selected image above; its prompt is retained here as history only.
+
+### Historical generation prompt
 
 ```text
 Use case: logo-brand.

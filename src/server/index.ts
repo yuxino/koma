@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { copyFile, stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { isIP } from "node:net";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
@@ -9,6 +9,7 @@ import { config } from "./config/config.js";
 import { createJob, deleteJob, loadJob, serializeJob, updateJob, type Job } from "./application/jobs.js";
 import { getTempAudio } from "./media/temp-audio.js";
 import { enqueueAnalysis } from "./application/pipeline.js";
+import { retainedInputPath } from "./application/retry-source.js";
 import { streamToFile } from "./media/download.js";
 import { extractUrlFromText } from "./media/resolver.js";
 import { normalizeVideoUrl } from "./media/url-source.js";
@@ -254,6 +255,14 @@ app.post<{ Params: { id: string } }>("/api/my/jobs/:id/retry", { onRequest: requ
       await copyStoredFile(previous.inputObjectKey, next.inputPath);
       // Already retained media takes priority over re-fetching an expiring link.
       next.sourceUrl = undefined;
+    } else {
+      const retained = await retainedInputPath(previous);
+      if (retained) {
+        next.inputPath = join(next.dir, `input${extensionFor(retained)}`);
+        next.inputMimeType = previous.inputMimeType;
+        await copyFile(retained, next.inputPath);
+        next.sourceUrl = undefined;
+      }
     }
     enqueueAnalysis(next);
     return reply.header("cache-control", "no-store").code(202).send({ jobId: next.id });
@@ -457,7 +466,7 @@ async function canAccessJob(request: FastifyRequest, jobId: string) {
 async function canRetryJob(job: Job): Promise<boolean> {
   if (job.status !== "failed") return false;
   job.sourceUrl ||= await readJobSource(job.id) || undefined;
-  return Boolean(job.sourceUrl || (job.inputObjectKey && job.mediaAvailable));
+  return Boolean(job.sourceUrl || (job.inputObjectKey && job.mediaAvailable) || await retainedInputPath(job));
 }
 
 async function accountHistoryRecord(record: JobHistoryRecord) {

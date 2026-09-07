@@ -19,7 +19,7 @@ import { formatTime } from "../../shared/format.js";
 import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
 import { progressStepStates, translateProgressDetail } from "../../shared/progress.js";
 import { translateTagCategory } from "../../shared/analysis-labels.js";
-import { WelcomeScreen } from "./WelcomeScreen.js";
+import { GithubMark, WelcomeScreen } from "./WelcomeScreen.js";
 import { Icon } from "../../shared/Icon.js";
 import { classifyMissingJobAccess, createWorkspaceRequestGuard, type AccessSession } from "./workspace-access.js";
 import { WorkspaceLibrary } from "./WorkspaceLibrary.js";
@@ -30,6 +30,7 @@ import "../../styles/atelier-workspace.css";
 import "../../styles/companion-shell.css";
 import "../../styles/companion-results.css";
 import "../../styles/companion-portrait.css";
+import "../../styles/companion-navigation.css";
 
 type Language = "en" | "zh";
 const analysisAccessHeaders = { "X-Koma-Client": "1" };
@@ -1092,10 +1093,12 @@ function App() {
     setInstruction(requests[kind]); setSuggestionIds([]); setSchemaActionError(""); setConfigNotice("");
   }
 
-  return <div className="app-shell companion-ui">
+  const libraryActive = Boolean(job || showHistory);
+
+  return <div className={`app-shell companion-ui${job?.result ? " has-result" : ""}`}>
     <header className="site-header"><div className="header-inner"><Brand onClick={job || showHistory ? goHome : undefined} label={t.backHome} />
-      {authenticated && <nav className="workspace-nav" aria-label={language === "zh" ? "工作区导航" : "Workspace navigation"}><button type="button" className={!job && !showHistory ? "selected" : ""} aria-current={!job && !showHistory ? "page" : undefined} onClick={goHome}>{language === "zh" ? "新分析" : "New analysis"}</button><button type="button" className={showHistory ? "selected" : ""} aria-current={showHistory ? "page" : undefined} onClick={enterLibrary}>{language === "zh" ? "资料库" : "Library"}{Boolean(auth.session?.legacyJobCount) && <i aria-label={language === "zh" ? "有旧任务可找回" : "Older jobs available"} />}</button></nav>}
-      <div className="header-actions"><button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
+      {authenticated && <nav className="workspace-nav" aria-label={language === "zh" ? "工作区导航" : "Workspace navigation"}><button type="button" className={!libraryActive ? "selected" : ""} aria-current={!libraryActive ? "page" : undefined} onClick={goHome}>{language === "zh" ? "新分析" : "New analysis"}</button><button type="button" className={libraryActive ? "selected" : ""} aria-current={libraryActive ? "page" : undefined} onClick={enterLibrary}>{language === "zh" ? "资料库" : "Library"}{Boolean(auth.session?.legacyJobCount) && <i aria-label={language === "zh" ? "有旧任务可找回" : "Older jobs available"} />}</button></nav>}
+      <div className="header-actions"><a className="github-star" href="https://github.com/yuxino/koma" target="_blank" rel="noreferrer" aria-label={language === "zh" ? "在 GitHub 上为 Koma 点 Star" : "Star Koma on GitHub"}><GithubMark /><span>GitHub · Star</span></a><button className="header-button language-button" type="button" disabled={generatingSchema} onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
       {authenticated && <span className="account-identity">{auth.session?.user?.avatarUrl && <img src={auth.session.user.avatarUrl} alt="" referrerPolicy="no-referrer" />}<span>{auth.session?.user?.login}</span></span>}
       <div className="header-more" ref={moreMenuRef}><button className="header-more-trigger" type="button" disabled={generatingSchema} aria-label={language === "zh" ? "更多选项" : "More options"} aria-expanded={showMoreMenu} aria-controls="header-more-menu" onClick={() => setShowMoreMenu((value) => !value)}><Glyph name="settings" size={17} /></button>{showMoreMenu && <div id="header-more-menu"><button type="button" onClick={() => { setShowMoreMenu(false); setShowSettings(true); }}><Glyph name="info" size={16} />{t.help}</button><a href="/admin"><Glyph name="settings" size={16} />{t.admin}</a>{authenticated && <button type="button" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? (language === "zh" ? "正在退出…" : "Signing out…") : (language === "zh" ? "退出登录" : "Sign out")}</button>}</div>}</div>
     </div></div></header>
@@ -1107,12 +1110,12 @@ function App() {
       {authenticated && !job && showHistory && <WorkspaceLibrary key={accountId} language={language} onOpen={openHistoryJob} onDelete={deleteOwnedJob} onNew={goHome} onUnauthorized={auth.expire} legacyJobCount={auth.session?.legacyJobCount || 0} onClaimed={auth.refresh} />}
       {authenticated && !job && !showHistory && <section className="landing-layout workspace-compose">
         <aside className="compose-aside">
-          <div className="compose-intro"><span className="page-label">{language === "zh" ? "你的视频小助手" : "YOUR VIDEO COMPANION"}</span><h1>{language === "zh" ? <>把视频放进来，<br />一起记下重点。</> : <>Bring a video.<br />I’ll keep the good bits.</>}</h1><p>{language === "zh" ? "找到重点、回看原句，再把笔记带走。今天想看哪一段？" : "Find the ideas, return to the words, and leave with useful notes."}</p><button type="button" className="compose-library-link" onClick={enterLibrary}><Icon name="arrow-up-right" size={17} /><span>{language === "zh" ? "去我的资料库看看" : "Open my video library"}</span></button></div>
+          <div className="compose-intro"><span className="page-label">{language === "zh" ? "你的视频小助手" : "YOUR VIDEO COMPANION"}</span><h1>{language === "zh" ? <>把视频放进来，<br />一起看懂重点。</> : <>Bring a video.<br />Let’s see what’s inside.</>}</h1><p>{language === "zh" ? "找到重点、定位原句，按需提取数据。今天想看哪一段？" : "Find the key ideas, revisit exact moments, and extract the details you need."}</p><button type="button" className="compose-library-link" onClick={enterLibrary}><Icon name="arrow-up-right" size={17} /><span>{language === "zh" ? "去我的资料库看看" : "Open my video library"}</span></button></div>
           <div className="compose-character"><span className="compose-greeting">{language === "zh" ? "准备好啦，一起开始吧。" : "Ready when you are."}</span><CompanionPortrait priority /></div>
         </aside>
 
         <form className="capture-card" onSubmit={startAnalysis} aria-busy={busy || generatingSchema} aria-label={t.startOne}>
-          <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><div className="capture-journey" aria-hidden="true"><span>{language === "zh" ? "放入视频" : "Add video"}</span><Icon name="arrow-up-right" size={14} /><span>{language === "zh" ? "告诉我要求" : "Make it yours"}</span><Icon name="arrow-up-right" size={14} /><span>{language === "zh" ? "收好笔记" : "Keep the notes"}</span></div></header>
+          <header className="capture-card-head"><div><span>{t.newAnalysis}</span><h2>{t.startOne}</h2></div><div className="capture-journey" aria-hidden="true"><span>{language === "zh" ? "放入视频" : "Add video"}</span><Icon name="arrow-up-right" size={14} /><span>{language === "zh" ? "告诉我要求" : "Make it yours"}</span><Icon name="arrow-up-right" size={14} /><span>{language === "zh" ? "查看分析" : "View results"}</span></div></header>
           <div className="workbench-source">
             <h3 id="video-source-heading" className="workbench-section-label"><span className="step-number">01</span>{t.sourceLabel}</h3>
             <div className="mode-switch" role="group" aria-label={t.sourceLabel}>
@@ -1128,7 +1131,7 @@ function App() {
           <section className="workbench-analysis" aria-labelledby="analysis-mode-heading">
             <h3 id="analysis-mode-heading" className="workbench-section-label"><span className="step-number">02</span>{t.presetsLabel}</h3>
             <p className="workbench-section-hint">{t.presetsHint}</p>
-            <div className="starter-templates"><span>{language === "zh" ? "从一个用途开始" : "Start with a use case"}</span>{(["learn", "meeting", "products"] as const).map((kind, index) => <button key={kind} type="button" disabled={generatingSchema || busy} onClick={() => applyStarter(kind)}>{(language === "zh" ? ["课程笔记", "访谈 / 会议", "产品整理"] : ["Study notes", "Interview / meeting", "Product notes"])[index]}<span aria-hidden="true"><Icon name="arrow-up-right" size={18} /></span></button>)}</div>
+            <div className="starter-templates"><span>{language === "zh" ? "从一个用途开始" : "Start with a use case"}</span>{(["learn", "meeting", "products"] as const).map((kind, index) => <button key={kind} type="button" disabled={generatingSchema || busy} onClick={() => applyStarter(kind)}>{(language === "zh" ? ["课程分析", "访谈 / 会议", "产品整理"] : ["Study analysis", "Interview / meeting", "Product details"])[index]}<span aria-hidden="true"><Icon name="arrow-up-right" size={18} /></span></button>)}</div>
             <label className="analysis-request-field">
               <span className="analysis-request-label"><strong>{t.analysisRequirement}</strong><small className={instruction.length > instructionLimit ? "over-limit" : ""}>{instruction.length}/{instructionLimit}</small></span>
               <textarea value={instruction} disabled={generatingSchema} onChange={(event) => { setInstruction(event.target.value); setSchemaActionError(""); setConfigNotice(""); }} maxLength={instructionLimit} rows={4} placeholder={t.instructionPlaceholder} />
@@ -1239,7 +1242,7 @@ function ResultView({ job, onRestart, onDelete, language }: { job: Job; onRestar
 
   return <section className="result-layout"><div className="result-main">
     <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={() => void copyReplayLink()}><Glyph name="link" size={16} />{linkCopied ? t.linkCopied : job.visibility === "legacy-link" ? (language === "zh" ? "复制旧版回看链接" : "Copy legacy replay link") : t.clear}</button>{job.owned && <button className="result-delete-button" type="button" disabled={deleting} onClick={() => void deleteResult()}><Glyph name="trash" size={16} />{deleting ? t.deleting : t.deleteOwn}</button>}</div></div>
-    <div className="result-utility-bar"><span><i aria-hidden="true" />{job.visibility === "legacy-link" ? (language === "zh" ? "旧版链接 · 持有链接的人可查看" : "Legacy link · anyone with this link can view") : (language === "zh" ? "私人视频 · 仅登录本人账号后可见" : "Private video · only your signed-in account")}</span><div><button type="button" onClick={() => exportNotes("markdown")}>{language === "zh" ? "导出笔记" : "Export notes"}<small>.md <Icon name="download" size={13} /></small></button><button type="button" disabled={!result.transcript.length} onClick={() => exportNotes("srt")}>{language === "zh" ? "导出字幕" : "Export subtitles"}<small>.srt <Icon name="download" size={13} /></small></button></div></div>
+    <div className="result-utility-bar"><span><i aria-hidden="true" />{job.visibility === "legacy-link" ? (language === "zh" ? "旧版链接 · 持有链接的人可查看" : "Legacy link · anyone with this link can view") : (language === "zh" ? "私人视频 · 仅登录本人账号后可见" : "Private video · only your signed-in account")}</span><div><button type="button" onClick={() => exportNotes("markdown")}>{language === "zh" ? "导出分析" : "Export analysis"}<small>.md <Icon name="download" size={13} /></small></button><button type="button" disabled={!result.transcript.length} onClick={() => exportNotes("srt")}>{language === "zh" ? "导出字幕" : "Export subtitles"}<small>.srt <Icon name="download" size={13} /></small></button></div></div>
     {resultNotice && <p className="result-notice" role="status">{resultNotice}</p>}
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
     <div className="summary-block"><span><Glyph name="spark" size={15} />{t.aiSummary}</span><p>{result.summary}</p></div>

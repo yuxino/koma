@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { contentDisposition } from "./artifacts.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-const oss = vi.hoisted(() => ({ put: vi.fn(), listV2: vi.fn(), putACL: vi.fn(), signatureUrl: vi.fn(), get: vi.fn() }));
-vi.mock("ali-oss", () => ({ default: class { put = oss.put; listV2 = oss.listV2; putACL = oss.putACL; signatureUrl = oss.signatureUrl; get = oss.get; } }));
-afterEach(() => { vi.resetAllMocks(); vi.resetModules(); vi.unstubAllEnvs(); });
+const oss = vi.hoisted(() => ({ construct: vi.fn(), put: vi.fn(), listV2: vi.fn(), putACL: vi.fn(), signatureUrl: vi.fn(), get: vi.fn(), cancel: vi.fn() }));
+vi.mock("ali-oss", () => ({ default: class { constructor(options: unknown) { oss.construct(options); } put = oss.put; listV2 = oss.listV2; putACL = oss.putACL; signatureUrl = oss.signatureUrl; get = oss.get; cancel = oss.cancel; } }));
+const cleanup: string[] = [];
+afterEach(async () => { vi.resetAllMocks(); vi.resetModules(); vi.unstubAllEnvs(); await Promise.all(cleanup.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 async function storage() {
   vi.stubEnv("STORAGE_DRIVER", "oss");
   vi.stubEnv("OSS_REGION", "test-region");
@@ -16,9 +20,13 @@ async function storage() {
 describe("private OSS object access", () => {
   it("writes private ACL at upload time even when the shared bucket is public", async () => {
     const module = await storage();
-    await module.putStoredFile("koma/jobs/one/video.mp4", "/tmp/not-opened-by-mock.mp4", "video/mp4");
+    const root = await mkdtemp(join(tmpdir(), "koma-oss-access-")); cleanup.push(root);
+    const input = join(root, "input.mp4"); await writeFile(input, "video");
+    await module.putStoredFile("koma/jobs/one/video.mp4", input, "video/mp4");
     await module.putStoredText("koma/jobs/one/result.json", "{}", "application/json");
     for (const call of oss.put.mock.calls) expect(call[2].headers).toEqual({ "cache-control": "private, no-store", "x-oss-object-acl": "private" });
+    expect(oss.construct).toHaveBeenCalledTimes(2);
+    for (const call of oss.construct.mock.calls) expect(call[0]).toMatchObject({ retryMax: 0, timeout: 120000 });
   });
 
   it("does not use configured permanent public URLs for private HTTP resources", async () => {
@@ -27,6 +35,20 @@ describe("private OSS object access", () => {
     oss.signatureUrl.mockReturnValue("https://signed.example/short-lived");
     expect(await module.storedObjectInfo("koma/jobs/one/video.mp4", { private: true })).toEqual({ url: "https://signed.example/short-lived" });
     expect(oss.signatureUrl).toHaveBeenCalledOnce();
+  });
+
+  it("waits for an in-flight write before listing objects for deletion", async () => {
+    const module = await storage(); let finish!: () => void;
+    oss.put.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    oss.listV2.mockResolvedValue({ objects: [], isTruncated: false });
+    const writing = module.putStoredText("koma/jobs/one/result.json", "{}", "application/json");
+    await vi.waitFor(() => expect(oss.put).toHaveBeenCalledOnce());
+    const deleting = module.deleteStoredPrefix("koma/jobs/one");
+    await Promise.resolve();
+    expect(oss.listV2).not.toHaveBeenCalled();
+    finish();
+    await Promise.all([writing, deleting]);
+    expect(oss.listV2).toHaveBeenCalledOnce();
   });
 
   it.each(["report.md", "工作区笔记 (复习).md"])("signs the attachment response header for %s instead of navigating to inline text", async (filename) => {

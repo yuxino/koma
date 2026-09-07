@@ -12,6 +12,9 @@ import type { AnalysisSpec } from "../analysis/analysis-spec.js";
 import { getRuntimeProviders, type RuntimeProvider, type RuntimeProviders } from "../analysis/provider-runtime.js";
 import type { AsrProvider } from "../config/config.js";
 import { putStoredFile, putStoredText } from "../persistence/storage.js";
+import { StorageWriteError } from "../persistence/oss-upload.js";
+import { retainRetrySource } from "./retry-source.js";
+import { storageWriteJournalPath } from "../persistence/storage-write-journal.js";
 
 // 限制同时运行的分析任务数，超出部分排队等待。
 // 多个大视频同时抽帧/转写会吃满 CPU 和内存，这里把它们串成有限并发。
@@ -145,7 +148,16 @@ async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
     updateJob(job, { progress: { stage: "storing_video", percent: 10, detail: "正在把原视频保存到长期存储。" } });
     const inputExtension = extname(inputPath).toLowerCase().match(/^\.[a-z0-9]{2,5}$/)?.[0] || ".mp4";
     const inputObjectKey = `${job.storagePrefix}/video/source${inputExtension}`;
-    await putStoredFile(inputObjectKey, inputPath, job.inputMimeType || "video/mp4");
+    try {
+      await putStoredFile(inputObjectKey, inputPath, job.inputMimeType || "video/mp4", { signal, journalPath: storageWriteJournalPath(job.dir) });
+    } catch (error) {
+      if (error instanceof StorageWriteError && !signal?.aborted) {
+        // Never retain a partial download; this point is reached only after input completion.
+        await retainRetrySource(job).catch(() => console.warn("[koma] 无法写入本地重试源的恢复记录。"));
+      }
+      throw error;
+    }
+    throwIfAborted(signal);
     updateJob(job, { inputObjectKey, mediaAvailable: true });
     await flushJob(job);
 
@@ -162,7 +174,8 @@ async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
     });
     throwIfAborted(signal);
     updateJob(job, { progress: { stage: "storing_results", percent: 95, detail: "正在保存关键帧和分析产物。" } });
-    await persistResultAssets(job, result, framesDir);
+    await persistResultAssets(job, result, framesDir, signal);
+    throwIfAborted(signal);
     updateJob(job, { status: "done", result, progress: { stage: "done", percent: 100, detail: "分析已经完成。" } });
     await flushJob(job);
   } finally {
@@ -171,17 +184,17 @@ async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
   }
 }
 
-async function persistResultAssets(job: Job, result: AnalysisResult, framesDir: string): Promise<void> {
+async function persistResultAssets(job: Job, result: AnalysisResult, framesDir: string, signal?: AbortSignal): Promise<void> {
   for (const frame of result.frames) {
     const objectKey = `${job.storagePrefix}/frames/${frame.filename}`;
-    await putStoredFile(objectKey, join(framesDir, frame.filename), "image/jpeg");
+    await putStoredFile(objectKey, join(framesDir, frame.filename), "image/jpeg", { signal, journalPath: storageWriteJournalPath(job.dir) });
     frame.storageKey = objectKey;
     delete frame.path;
   }
   for (const artifact of result.artifacts || []) {
     const safeName = artifact.name.replace(/[\\/]/g, "-");
     const objectKey = `${job.storagePrefix}/artifacts/${artifact.id}-${safeName}`;
-    await putStoredText(objectKey, artifact.content, artifact.mimeType);
+    await putStoredText(objectKey, artifact.content, artifact.mimeType, { signal, journalPath: storageWriteJournalPath(job.dir) });
     artifact.storageKey = objectKey;
   }
 }

@@ -1,10 +1,13 @@
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type OSS from "ali-oss";
+import { uploadOssObject, type StoredWriteOptions } from "./oss-upload.js";
+import { settleStorageWrite } from "./storage-write-journal.js";
 
 export type StorageDriver = "local" | "oss";
 
 let ossClient: OSS | null = null;
+const activeWrites = new Map<Promise<void>, string>();
 
 export function storageDriver(): StorageDriver {
   const value = String(process.env.STORAGE_DRIVER || "local").trim().toLowerCase();
@@ -30,26 +33,32 @@ export async function initializeStorage(): Promise<void> {
   await client.listV2({ prefix: `${storagePrefix()}/`, "max-keys": 1 });
 }
 
-export async function putStoredFile(key: string, filePath: string, mimeType: string): Promise<void> {
+export async function putStoredFile(key: string, filePath: string, mimeType: string, options: StoredWriteOptions = {}): Promise<void> {
   const safeKey = normalizeKey(key);
-  if (storageDriver() === "oss") {
-    await (await getOssClient()).put(safeKey, filePath, { mime: mimeType, headers: { "cache-control": "private, no-store", "x-oss-object-acl": "private" } });
-    return;
-  }
-  const target = localObjectPath(safeKey);
-  await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-  await copyFile(filePath, target);
+  await trackWrite(safeKey, async () => {
+    options.signal?.throwIfAborted();
+    if (storageDriver() === "oss") return uploadOssObject(await createOssClient(), safeKey, filePath, mimeType, options);
+    const target = localObjectPath(safeKey);
+    await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+    await copyFile(filePath, target);
+  });
 }
 
-export async function putStoredText(key: string, content: string, mimeType: string): Promise<void> {
+export async function putStoredText(key: string, content: string, mimeType: string, options: StoredWriteOptions = {}): Promise<void> {
   const safeKey = normalizeKey(key);
-  if (storageDriver() === "oss") {
-    await (await getOssClient()).put(safeKey, Buffer.from(content, "utf8"), { mime: mimeType, headers: { "cache-control": "private, no-store", "x-oss-object-acl": "private" } });
-    return;
-  }
-  const target = localObjectPath(safeKey);
-  await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-  await writeFile(target, content, { encoding: "utf8", mode: 0o600 });
+  await trackWrite(safeKey, async () => {
+    options.signal?.throwIfAborted();
+    if (storageDriver() === "oss") return uploadOssObject(await createOssClient(), safeKey, Buffer.from(content, "utf8"), mimeType, options);
+    const target = localObjectPath(safeKey);
+    await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+    await writeFile(target, content, { encoding: "utf8", mode: 0o600 });
+  });
+}
+
+async function trackWrite(key: string, write: () => Promise<void>): Promise<void> {
+  const operation = write();
+  activeWrites.set(operation, key);
+  try { await operation; } finally { activeWrites.delete(operation); }
 }
 
 export async function readStoredText(key: string): Promise<string> {
@@ -98,13 +107,16 @@ export async function makeStoredPrefixPrivate(prefix: string): Promise<void> {
   } while (continuationToken);
 }
 
-export async function deleteStoredPrefix(prefix: string): Promise<void> {
+export async function deleteStoredPrefix(prefix: string, options: { journalPath?: string } = {}): Promise<void> {
   const safePrefix = `${normalizeKey(prefix).replace(/\/+$/, "")}/`;
+  // A canceled CompleteMultipartUpload can still finish. Delete only after writers settle.
+  await Promise.allSettled([...activeWrites].filter(([, key]) => key.startsWith(safePrefix)).map(([operation]) => operation));
   if (storageDriver() === "local") {
     await rm(localObjectPath(safePrefix), { recursive: true, force: true });
     return;
   }
   const client = await getOssClient();
+  if (options.journalPath) await settleStorageWrite(await createOssClient(), options.journalPath, safePrefix);
   let continuationToken: string | undefined;
   do {
     const result = await client.listV2({ prefix: safePrefix, "max-keys": 1000, ...(continuationToken ? { "continuation-token": continuationToken } : {}) });
@@ -120,16 +132,22 @@ export function storageHealth() {
 
 async function getOssClient(): Promise<OSS> {
   if (ossClient) return ossClient;
+  ossClient = await createOssClient();
+  return ossClient;
+}
+
+async function createOssClient(): Promise<OSS> {
   const { default: OssClient } = await import("ali-oss");
-  ossClient = new OssClient({
+  const options: OSS.Options & { retryMax: number } = {
     region: requiredEnv("OSS_REGION"),
     accessKeyId: requiredEnv("OSS_ACCESS_KEY_ID"),
     accessKeySecret: requiredEnv("OSS_ACCESS_KEY_SECRET"),
     bucket: requiredEnv("OSS_BUCKET"),
     secure: true,
+    retryMax: 0,
     timeout: positiveInteger(process.env.OSS_TIMEOUT_MS, 120_000)
-  });
-  return ossClient;
+  };
+  return new OssClient(options);
 }
 
 function localRoot(): string {

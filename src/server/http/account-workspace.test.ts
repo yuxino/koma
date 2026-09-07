@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -164,6 +164,31 @@ describe("account workspace HTTP boundaries", () => {
     expect(callback.headers.get("referrer-policy")).toBe("no-referrer");
     expect(output).not.toContain("DO_NOT_LOG_CODE");
     expect(output).not.toContain("DO_NOT_LOG_STATE");
+  });
+
+  it("retries a complete local source left by failed OSS storage without exposing it", async () => {
+    const id = "10000000-0000-4000-8000-000000000006";
+    await seedJob(id, "failed");
+    database.prepare("INSERT INTO koma_job_accounts VALUES (?, ?)").run(id, "1");
+    database.prepare("UPDATE koma_jobs SET input_object_key = NULL, media_available = 0 WHERE id = ?").run(id);
+    const dir = join(root, "tmp", `koma-${id}`);
+    const content = "complete locally retained source";
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await writeFile(join(dir, "input.mp4"), content, { mode: 0o600 });
+    await writeFile(join(dir, "retry-source.json"), JSON.stringify({ filename: "input.mp4", size: Buffer.byteLength(content) }), { mode: 0o600 });
+    expect((await post(`/api/my/jobs/${id}/retry`, cookieB)).status).toBe(404);
+    const current = await (await get(`/api/jobs/${id}`, cookieA)).json() as { retryable: boolean };
+    expect(current.retryable).toBe(true);
+    expect(JSON.stringify(current)).not.toMatch(/retry-source|input\.mp4|localRetrySource/);
+    const response = await post(`/api/my/jobs/${id}/retry`, cookieA);
+    expect(response.status).toBe(202);
+    const { jobId } = await response.json() as { jobId: string };
+    expect((await get(`/api/jobs/${jobId}`, cookieB)).status).toBe(404);
+    const target = join(root, "storage", "koma", "jobs", jobId, "video", "source.mp4");
+    await expect.poll(async () => readFile(target, "utf8").catch(() => "")).toBe(content);
+    expect((await fetch(`${baseUrl}/api/my/jobs/${id}`, { method: "DELETE", headers: { ...mutation, cookie: cookieA } })).status).toBe(204);
+    await expect(stat(dir)).rejects.toThrow();
+    await fetch(`${baseUrl}/api/my/jobs/${jobId}`, { method: "DELETE", headers: { ...mutation, cookie: cookieA } });
   });
 
   it("limits login starts before creating unbounded pending OAuth rows", async () => {

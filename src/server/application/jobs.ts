@@ -8,6 +8,8 @@ import type { Artifact } from "../persistence/artifacts.js";
 import { deleteJobRecord, readJobAccount, readJobSource, readJobOwner, readJobRecord, writeJobAccount, writeJobSource, writeJobOwner, writeJobRecord, type PersistedJobRecord } from "../persistence/database.js";
 import { getRuntimeProviders, type RuntimeProviders } from "../analysis/provider-runtime.js";
 import { deleteStoredPrefix, jobStoragePrefix } from "../persistence/storage.js";
+import { retainedInputPath } from "./retry-source.js";
+import { hasStorageWrite, StorageCleanupError, storageWriteJournalPath } from "../persistence/storage-write-journal.js";
 export type { TranscriptLine };
 
 export interface Frame {
@@ -68,6 +70,7 @@ export interface Job {
   inputPath?: string;
   inputMimeType?: string;
   inputObjectKey?: string;
+  localRetrySource?: { filename: string; size: number };
   storagePrefix: string;
   mediaAvailable: boolean;
   language: "en" | "zh";
@@ -193,19 +196,29 @@ export function serializeJob(job: Job | undefined) {
 export async function deleteJob(id: string): Promise<void> {
   const job = jobs.get(id) || await loadJob(id);
   abortControllers.get(id)?.abort();
-  abortControllers.delete(id);
   await persistenceQueues.get(id);
-  persistenceQueues.delete(id);
-  jobs.delete(id);
   if (job) {
-    await deleteStoredPrefix(job.storagePrefix).catch((error) => console.warn(`[koma] 无法清理任务存储：${messageOf(error)}`));
+    try {
+      await deleteStoredPrefix(job.storagePrefix, { journalPath: storageWriteJournalPath(job.dir) });
+    } catch {
+      const error = new StorageCleanupError();
+      updateJob(job, { status: ["processing", "queued"].includes(job.status) ? "failed" : job.status, error: error.message });
+      await flushJob(job);
+      throw error;
+    }
     await rm(job.dir, { recursive: true, force: true }).catch(() => undefined);
   }
   await deleteJobRecord(id);
+  abortControllers.delete(id);
+  persistenceQueues.delete(id);
+  jobs.delete(id);
 }
 
 export async function releaseWorkingDirectory(job: Job): Promise<void> {
   await flushJob(job);
+  if (await hasStorageWrite(storageWriteJournalPath(job.dir))) return;
+  const retained = await retainedInputPath(job);
+  if (retained) { job.inputPath = retained; return; }
   await rm(job.dir, { recursive: true, force: true }).catch(() => undefined);
   job.inputPath = undefined;
 }

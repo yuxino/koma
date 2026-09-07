@@ -93,10 +93,10 @@
   width: 38px;
   height: 38px;
   flex: 0 0 auto;
-  object-fit: cover;
-  border: 1px solid var(--ink);
-  border-radius: 3px;
-  background: var(--surface-strong);
+  object-fit: contain;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
 }
 
 .admin-shell .admin-brand > span {
@@ -260,10 +260,10 @@
   width: 58px;
   height: 58px;
   margin: 0 0 25px;
-  object-fit: cover;
-  border: 1px solid var(--ink);
-  border-radius: 3px;
-  background: var(--surface-strong);
+  object-fit: contain;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
 }
 
 .admin-shell .admin-login > span {

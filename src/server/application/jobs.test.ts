@@ -108,6 +108,26 @@ describe("job lifecycle cleanup", () => {
     await expect(stat(job.dir)).rejects.toThrow();
   });
 
+  it("keeps a failed complete source through finalization and reload, but deletes it with its job", async () => {
+    const { createJob, releaseWorkingDirectory, updateJob, serializeJob } = await loadJobs();
+    const { retainRetrySource, retainedInputPath } = await import("./retry-source.js");
+    const job = await createJob({ source: "upload", title: "retained.mp4" });
+    job.inputPath = join(job.dir, "input.mp4");
+    await writeFile(job.inputPath, "complete source");
+    await retainRetrySource(job);
+    updateJob(job, { status: "failed", error: "Storage write failed" });
+    await releaseWorkingDirectory(job);
+    expect(await retainedInputPath(job)).toBe(job.inputPath);
+    expect(JSON.stringify(serializeJob(job))).not.toContain("localRetrySource");
+    await (await import("../persistence/database.js")).closeDatabase();
+    vi.resetModules();
+    const reloaded = await import("./jobs.js");
+    const restored = await reloaded.loadJob(job.id);
+    expect(await retainedInputPath(restored!)).toBe(job.inputPath);
+    await reloaded.deleteJob(job.id);
+    await expect(stat(job.dir)).rejects.toThrow();
+  });
+
   it("deleteJob removes URL-job working data", async () => {
     const { createJob, deleteJob, getJob } = await loadJobs();
     const job = await createJob({ source: "url", title: "https://example.com/a.mp4" });
