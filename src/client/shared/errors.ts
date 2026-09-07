@@ -61,12 +61,12 @@ const translations: Array<[RegExp, string]> = [
   [/没有找到这个地址/, "This endpoint was not found."]
 ];
 
-export function translateServerError(message: string | null | undefined, language: Language): string {
+export function translateServerError(message: string | null | undefined, language: Language, options: { preserveUnknown?: boolean } = {}): string {
   const text = typeof message === "string" ? message.trim() : "";
   if (!text) return "";
   if (language === "zh") return text;
   for (const [pattern, english] of translations) {
     if (pattern.test(text)) return english;
   }
-  return "Something went wrong. Please try again.";
+  return options.preserveUnknown ? message ?? text : "Something went wrong. Please try again.";
 }

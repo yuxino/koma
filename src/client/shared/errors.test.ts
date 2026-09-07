@@ -39,6 +39,20 @@ describe("translateServerError", () => {
     expect(translateServerError("某种未收录的错误", "en")).toBe("Something went wrong. Please try again.");
   });
 
+  it("translates a failed download while allowing the failure view to preserve unknown details", () => {
+    const message = "视频下载不完整，已自动重试 3 次。 视频地址无法访问：404";
+    expect(translateServerError(message, "en", { preserveUnknown: true })).toBe("Video download was incomplete. Try again or use a direct video URL.");
+    expect(translateServerError(message, "zh", { preserveUnknown: true })).toBe(message);
+  });
+
+  it("keeps unknown provider failures readable when explicitly requested", () => {
+    for (const message of ["Provider X: custom_error=731, request_id=abc-123", "未知提供方返回详情：稍后重试（编号 abc-123）", "  provider details\nretry_after=30  "]) {
+      expect(translateServerError(message, "en", { preserveUnknown: true })).toBe(message);
+    }
+    expect(translateServerError("某种未收录的错误", "en")).toBe("Something went wrong. Please try again.");
+    expect(translateServerError(undefined, "en", { preserveUnknown: true })).toBe("");
+  });
+
   it("returns an empty string for empty input", () => {
     expect(translateServerError("", "en")).toBe("");
     expect(translateServerError(undefined, "en")).toBe("");
