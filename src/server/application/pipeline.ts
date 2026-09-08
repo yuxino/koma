@@ -21,9 +21,11 @@ import { storageWriteJournalPath } from "../persistence/storage-write-journal.js
 const analysisSlots = createSemaphore(config.maxConcurrentJobs);
 
 export function enqueueAnalysis(job: Job): void {
+  // Capture cancellation before scheduling; deletion removes the controller from the registry.
+  const signal = getJobAbortSignal(job.id);
+  if (!signal || signal.aborted) return;
   setImmediate(async () => {
-    const signal = getJobAbortSignal(job.id);
-    if (signal?.aborted) return;
+    if (signal.aborted) return;
     await analysisSlots.acquire();
     try {
       if (signal?.aborted) return;
@@ -131,8 +133,8 @@ async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
     if (job.sourceUrl) {
       // 视频地址任务：在后台解析真实地址并下载，全程回报进度，提交接口不再阻塞
       const resolved = await resolveVideoUrl(job.sourceUrl, { signal });
-      if (resolved.title) updateJob(job, { title: resolved.title });
       throwIfAborted(signal);
+      if (resolved.title) updateJob(job, { title: resolved.title });
       updateJob(job, { progress: { stage: "downloading", percent: 8, detail: "正在把视频放入临时空间。" } });
       inputPath = join(job.dir, "input.mp4");
       job.inputPath = inputPath;

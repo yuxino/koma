@@ -83,6 +83,8 @@ export interface Job {
 const jobs = new Map<string, Job>();
 const abortControllers = new Map<string, AbortController>();
 const persistenceQueues = new Map<string, Promise<void>>();
+const loadingJobs = new Map<string, Promise<Job | undefined>>();
+const deletingJobs = new Map<string, Promise<void>>();
 
 export async function createJob({ source, title, language = "zh", analysisSpec = {}, providers = getRuntimeProviders(), ownerId, accountId, sourceUrl }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec; providers?: RuntimeProviders; ownerId?: string; accountId?: string; sourceUrl?: string }): Promise<Job> {
   const id = randomUUID();
@@ -136,18 +138,40 @@ export function getJob(id: string): Job | undefined {
 }
 
 export async function loadJob(id: string): Promise<Job | undefined> {
+  if (deletingJobs.has(id)) return undefined;
   const active = jobs.get(id);
   if (active) return active;
+  const pending = loadingJobs.get(id);
+  if (pending) return pending;
+  const loading = readPersistedJob(id).then((job) => {
+    // Deletion invalidates this read even if it finishes after deletion has settled.
+    if (loadingJobs.get(id) !== loading || deletingJobs.has(id)) return undefined;
+    if (job) jobs.set(id, job);
+    return job;
+  });
+  loadingJobs.set(id, loading);
+  try {
+    return await loading;
+  } finally {
+    if (loadingJobs.get(id) === loading) loadingJobs.delete(id);
+  }
+}
+
+async function readPersistedJob(id: string): Promise<Job | undefined> {
   const record = await readJobRecord(id);
   if (!record) return undefined;
   const job = fromPersistedRecord(record, await readJobOwner(id));
   job.accountId = await readJobAccount(id) || undefined;
   job.sourceUrl = await readJobSource(id) || undefined;
-  jobs.set(id, job);
   return job;
 }
 
 export function updateJob(job: Job, patch: Partial<Job>): Job {
+  if (jobs.get(job.id) !== job || deletingJobs.has(job.id) || abortControllers.get(job.id)?.signal.aborted) return job;
+  return persistJobUpdate(job, patch);
+}
+
+function persistJobUpdate(job: Job, patch: Partial<Job>): Job {
   Object.assign(job, patch);
   job.updatedAt = Date.now();
   if (job.status === "done" && !job.completedAt) job.completedAt = job.updatedAt;
@@ -194,15 +218,30 @@ export function serializeJob(job: Job | undefined) {
 }
 
 export async function deleteJob(id: string): Promise<void> {
-  const job = jobs.get(id) || await loadJob(id);
+  const pending = deletingJobs.get(id);
+  if (pending) return pending;
+  loadingJobs.delete(id);
   abortControllers.get(id)?.abort();
-  await persistenceQueues.get(id);
+  const deletion = Promise.resolve().then(() => removeJob(id));
+  deletingJobs.set(id, deletion);
+  try {
+    await deletion;
+  } finally {
+    deletingJobs.delete(id);
+  }
+}
+
+async function removeJob(id: string): Promise<void> {
+  const job = jobs.get(id) || await readPersistedJob(id);
+  // A failed status write must not prevent an explicit deletion from cleaning up.
+  await persistenceQueues.get(id)?.catch(() => undefined);
   if (job) {
     try {
       await deleteStoredPrefix(job.storagePrefix, { journalPath: storageWriteJournalPath(job.dir) });
     } catch {
       const error = new StorageCleanupError();
-      updateJob(job, { status: ["processing", "queued"].includes(job.status) ? "failed" : job.status, error: error.message });
+      jobs.set(id, job);
+      persistJobUpdate(job, { status: ["processing", "queued"].includes(job.status) ? "failed" : job.status, error: error.message });
       await flushJob(job);
       throw error;
     }
@@ -216,11 +255,18 @@ export async function deleteJob(id: string): Promise<void> {
 
 export async function releaseWorkingDirectory(job: Job): Promise<void> {
   await flushJob(job);
+  if (workingDirectoryOwnedByDeletion(job)) return;
   if (await hasStorageWrite(storageWriteJournalPath(job.dir))) return;
   const retained = await retainedInputPath(job);
   if (retained) { job.inputPath = retained; return; }
+  if (workingDirectoryOwnedByDeletion(job)) return;
   await rm(job.dir, { recursive: true, force: true }).catch(() => undefined);
   job.inputPath = undefined;
+}
+
+function workingDirectoryOwnedByDeletion(job: Job): boolean {
+  // Keep recovery files if deletion failed; its aborted controller remains registered.
+  return deletingJobs.has(job.id) || jobs.get(job.id) !== job || Boolean(abortControllers.get(job.id)?.signal.aborted);
 }
 
 function queuePersistence(job: Job): void {

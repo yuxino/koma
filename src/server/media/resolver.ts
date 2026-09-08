@@ -246,6 +246,7 @@ export function bilibiliBvid(value: string): string | null {
 
 // 统一入口：能解析出真实可下载地址就返回它，否则原样返回让下载流程兜底。
 export async function resolveVideoUrl(value: string, options: ResolveOptions = {}): Promise<ResolvedVideo> {
+  options.signal?.throwIfAborted();
   if (looksLikeDouyinLink(value)) {
     try {
       return await resolveDouyinVideo(value, options);
@@ -265,7 +266,7 @@ export async function resolveVideoUrl(value: string, options: ResolveOptions = {
       return { url: value, source: "direct", title: undefined };
     }
   }
-  const ytdlpUrl = await resolveWithYtDlp(value);
+  const ytdlpUrl = await resolveWithYtDlp(value, { signal: options.signal, timeoutMs: options.timeoutMs });
   if (ytdlpUrl) return { url: ytdlpUrl, source: "ytdlp", title: undefined };
   return { url: value, source: "direct", title: undefined };
 }
@@ -276,11 +277,13 @@ function combineSignals(signal: AbortSignal | undefined, timeoutMs: number): Abo
 
 // yt-dlp 兜底：覆盖抖音/B站之外的其他站点（YouTube、小红书、微博等）。
 export async function resolveWithYtDlp(value: string, options: YtDlpResolveOptions = {}): Promise<string | null> {
+  options.signal?.throwIfAborted();
   const commands = options.commands ?? findYtDlpCommands();
   const runImpl = options.runImpl ?? runYtDlp;
   const timeoutMs = options.timeoutMs ?? 90_000;
   const deadline = Date.now() + timeoutMs;
   for (const command of commands) {
+    options.signal?.throwIfAborted();
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) break;
     const args = [
@@ -294,7 +297,8 @@ export async function resolveWithYtDlp(value: string, options: YtDlpResolveOptio
       "-g",
       value
     ];
-    const { stdout } = await runImpl(command.bin, args, remainingMs);
+    const { stdout } = await runImpl(command.bin, args, remainingMs, options.signal);
+    options.signal?.throwIfAborted();
     const lines = String(stdout || "")
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -338,8 +342,9 @@ export interface YtDlpCommandLookupOptions extends CommandLookupOptions {
 
 export interface YtDlpResolveOptions {
   commands?: readonly YtDlpCommand[];
-  runImpl?: (bin: string, args: string[], timeoutMs: number) => Promise<{ stdout: string; stderr: string }>;
+  runImpl?: (bin: string, args: string[], timeoutMs: number, signal?: AbortSignal) => Promise<{ stdout: string; stderr: string }>;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 const defaultWindowsPathExt = [".COM", ".EXE", ".BAT", ".CMD"];
@@ -435,18 +440,28 @@ function windowsPathExtensions(env: NodeJS.ProcessEnv): string[] {
   return extensions.length > 0 ? [...new Set(extensions.map((extension) => extension.toUpperCase()))] : defaultWindowsPathExt;
 }
 
-function runYtDlp(bin: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
+function runYtDlp(bin: string, args: string[], timeoutMs: number, signal?: AbortSignal): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"], shell: false, windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
     const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
-    child.on("error", () => { clearTimeout(timer); resolve({ stdout: "", stderr: "" }); });
+    const abort = () => { child.kill("SIGKILL"); };
+    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    child.on("error", () => {
+      cleanup();
+      if (signal?.aborted) reject(signal.reason);
+      else resolve({ stdout: "", stderr: "" });
+    });
     child.on("close", () => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr });
+      cleanup();
+      if (signal?.aborted) reject(signal.reason);
+      else resolve({ stdout, stderr });
     });
   });
 }

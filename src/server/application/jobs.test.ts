@@ -159,4 +159,57 @@ describe("job lifecycle cleanup", () => {
     expect(signal?.aborted).toBe(true);
     await expect(stat(job.dir)).rejects.toThrow();
   });
+
+  it("ignores delayed updates after deletion instead of recreating an unowned record", async () => {
+    const { createJob, deleteJob, updateJob, flushJob } = await loadJobs();
+    const database = await import("../persistence/database.js");
+    const job = await createJob({ source: "upload", title: "private.mp4" });
+    await deleteJob(job.id);
+    updateJob(job, { title: "late resolver title", status: "processing" });
+    await flushJob(job);
+    expect(await database.readJobRecord(job.id)).toBeNull();
+    expect(job.title).toBe("private.mp4");
+  });
+
+  it("does not refill the cache from a read that started before deletion", async () => {
+    const first = await loadJobs();
+    const originalDatabase = await import("../persistence/database.js");
+    await originalDatabase.saveAccount({ id: "123", login: "owner", name: null, avatarUrl: "https://avatars.githubusercontent.com/u/123" });
+    const job = await first.createJob({ source: "upload", title: "private.mp4", accountId: "123" });
+    await originalDatabase.closeDatabase();
+    vi.resetModules();
+    const jobs = await import("./jobs.js");
+    const database = await import("../persistence/database.js");
+    const owner = Promise.withResolvers<string | null>();
+    const readOwner = vi.spyOn(database, "readJobOwner").mockImplementationOnce(() => owner.promise);
+    const loading = jobs.loadJob(job.id);
+    await vi.waitFor(() => expect(readOwner).toHaveBeenCalledOnce());
+    try {
+      await jobs.deleteJob(job.id);
+      owner.resolve(null);
+      expect(await loading).toBeUndefined();
+      expect(jobs.getJob(job.id)).toBeUndefined();
+      expect(await jobs.loadJob(job.id)).toBeUndefined();
+      expect(await database.readJobRecord(job.id)).toBeNull();
+    } finally {
+      owner.resolve(null);
+      await loading;
+      readOwner.mockRestore();
+    }
+  });
+
+  it("shares one live job between overlapping loads so updates keep their identity", async () => {
+    const first = await loadJobs();
+    const job = await first.createJob({ source: "upload", title: "saved.mp4" });
+    await (await import("../persistence/database.js")).closeDatabase();
+    vi.resetModules();
+    const jobs = await import("./jobs.js");
+    const [left, right] = await Promise.all([jobs.loadJob(job.id), jobs.loadJob(job.id)]);
+    expect(left).toBeDefined();
+    expect(left).toBe(right);
+    jobs.updateJob(left!, { title: "updated by either reader" });
+    await jobs.flushJob(right!);
+    expect(await (await import("../persistence/database.js")).readJobRecord(job.id)).toMatchObject({ title: "updated by either reader" });
+    await jobs.deleteJob(job.id);
+  });
 });

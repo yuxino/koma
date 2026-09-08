@@ -22,4 +22,16 @@ describe("daily demo limiter", () => {
     expect(limiter.consume("ip").allowed).toBe(true);
     expect(limiter.consume("ip").allowed).toBe(true);
   });
+
+  it("checks allowance before an upload without consuming it, including after daily reset", () => {
+    const limiter = createDailyLimiter(1);
+    const today = Date.UTC(2026, 7, 20, 12);
+    const tomorrow = today + 24 * 60 * 60 * 1000;
+    expect(limiter.check("ip", today)).toMatchObject({ allowed: true, remaining: 1 });
+    expect(limiter.check("ip", today)).toMatchObject({ allowed: true, remaining: 1 });
+    expect(limiter.consume("ip", today)).toMatchObject({ allowed: true, remaining: 0 });
+    expect(limiter.check("ip", today)).toMatchObject({ allowed: false, remaining: 0 });
+    expect(limiter.check("ip", tomorrow)).toMatchObject({ allowed: true, remaining: 1 });
+    expect(limiter.consume("ip", tomorrow)).toMatchObject({ allowed: true, remaining: 0 });
+  });
 });

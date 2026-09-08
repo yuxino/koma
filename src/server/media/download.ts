@@ -67,7 +67,8 @@ export async function streamToFile(
   outputPath: string,
   maxBytes: number,
   contentLength = 0,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  signal?: AbortSignal
 ): Promise<number> {
   let bytes = 0;
   let lastReportedPercent = -1;
@@ -85,6 +86,6 @@ export async function streamToFile(
       callback(null, chunk);
     }
   });
-  await pipeline(readable, counter, createWriteStream(outputPath));
+  await pipeline(readable, counter, createWriteStream(outputPath), { signal });
   return bytes;
 }

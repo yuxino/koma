@@ -5,7 +5,7 @@ import { isIP } from "node:net";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import { config } from "./config/config.js";
-import { createJob, deleteJob, loadJob, serializeJob, updateJob, type Job } from "./application/jobs.js";
+import { createJob, deleteJob, getJobAbortSignal, loadJob, serializeJob, updateJob, type Job } from "./application/jobs.js";
 import { getTempAudio } from "./media/temp-audio.js";
 import { enqueueAnalysis } from "./application/pipeline.js";
 import { retainedInputPath } from "./application/retry-source.js";
@@ -14,8 +14,9 @@ import { extractUrlFromText } from "./media/resolver.js";
 import { normalizeVideoUrl } from "./media/url-source.js";
 import { parseByteRange } from "./media/video-stream.js";
 import { createDailyLimiter } from "./http/rate-limit.js";
+import { observeMultipartCompletion } from "./http/multipart-completion.js";
 import { frontendResponseHeaders, registerFrontend } from "./http/frontend.js";
-import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis/analysis-spec.js";
+import { ARTIFACT_FORMATS, MAX_OUTPUT_SCHEMA_CHARS, parseAnalysisSpec } from "./analysis/analysis-spec.js";
 import { generateAnalysisSpec, validateAnalysisSpecGenerationLanguage, validateAnalysisSpecGenerationRequest } from "./analysis/analysis-spec-ai.js";
 import { contentDisposition } from "./persistence/artifacts.js";
 import {
@@ -272,31 +273,49 @@ app.post<{ Params: { id: string } }>("/api/my/jobs/:id/retry", { onRequest: requ
 
 app.post("/api/analyze/upload", { onRequest: requireAnalysisAccess }, async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
+  let uploadSignal: AbortSignal | undefined;
+  let completion: ReturnType<typeof observeMultipartCompletion> | undefined;
   try {
-    const part = await request.file();
-    if (!part) return reply.code(400).send({ error: "没有找到视频文件。" });
-    if (!part.mimetype.startsWith("video/")) return reply.code(415).send({ error: "请放入视频文件。" });
-    const analysisSpec = parseAnalysisSpec({
-      instruction: multipartFieldValue(part.fields, "instruction"),
-      outputSchema: multipartFieldValue(part.fields, "outputSchema"),
-      artifactFormats: multipartFieldValue(part.fields, "artifactFormats")
-    });
-    if (!acceptDemoRequest(request, reply)) return;
     const language = requestLanguage((request.query as { lang?: string } | undefined)?.lang);
     const user = await requireAccount(request, reply);
     if (!user) return;
-    const accountId = user.id;
-    job = await createJob({ source: "upload", title: part.filename, language, analysisSpec, accountId });
-    const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
-    job.inputPath = inputPath;
-    job.inputMimeType = part.mimetype;
-    await streamToFile(part.file as unknown as NodeJS.ReadableStream, inputPath, config.maxUploadBytes);
-    if (part.file.truncated) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
+    if (!acceptDemoRequest(request, reply, false)) return;
+    const fields: Record<string, unknown> = Object.create(null);
+    completion = observeMultipartCompletion(request.raw);
+    // Consume every part before scheduling: fields may follow the video, and later parts can fail.
+    for await (const part of request.parts({ limits: { files: 1, fields: 8, fieldSize: MAX_OUTPUT_SCHEMA_CHARS * 4 } })) {
+      if (part.type === "field") {
+        if (part.fieldnameTruncated || part.valueTruncated) throw Object.assign(new Error("上传字段太大或不完整。"), { statusCode: 413 });
+        if (Object.hasOwn(fields, part.fieldname)) throw Object.assign(new Error("上传字段不能重复。"), { statusCode: 400 });
+        fields[part.fieldname] = part.value;
+        continue;
+      }
+      if (!part.mimetype.startsWith("video/")) throw Object.assign(new Error("请放入视频文件。"), { statusCode: 415 });
+      job = await createJob({ source: "upload", title: part.filename, language, analysisSpec: parseAnalysisSpec(fields), accountId: user.id });
+      uploadSignal = getJobAbortSignal(job.id);
+      const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
+      job.inputPath = inputPath;
+      job.inputMimeType = part.mimetype;
+      const bytes = await streamToFile(part.file, inputPath, config.maxUploadBytes, 0, undefined, uploadSignal);
+      if (part.file.truncated) throw Object.assign(new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`), { statusCode: 413 });
+      if (!bytes) throw new Error("视频文件为空，请重新上传。");
+    }
+    completion.assertComplete();
+    if (!job) return reply.code(400).send({ error: "没有找到视频文件。" });
+    const analysisSpec = parseAnalysisSpec(fields);
+    uploadSignal?.throwIfAborted();
+    if (!acceptDemoRequest(request, reply)) {
+      await deleteJob(job.id);
+      return;
+    }
+    updateJob(job, { analysisSpec });
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
     if (job) await deleteJob(job.id);
     return reply.code(statusCodeOf(error) || 400).send({ error: messageOf(error) });
+  } finally {
+    completion?.dispose();
   }
 });
 
@@ -445,7 +464,10 @@ async function requireAccount(request: FastifyRequest, reply: FastifyReply) {
 }
 
 async function canAccessJob(request: FastifyRequest, jobId: string) {
-  const accountId = await readJobAccount(jobId);
+  const job = await loadJob(jobId);
+  if (!job) return { private: false, owned: false, allowed: false };
+  // Deletion can remove the relation while this request still holds the private job snapshot.
+  const accountId = await readJobAccount(jobId) || job.accountId;
   const user = await currentAccount(request.headers.cookie);
   const owned = Boolean(accountId && user?.id === accountId);
   return { private: Boolean(accountId), owned, allowed: !accountId || owned || isAdminSession(request.headers.cookie) };
@@ -544,9 +566,9 @@ function statusCodeOf(error: unknown): number | undefined {
   return (error as { statusCode?: number })?.statusCode;
 }
 
-function acceptDemoRequest(request: FastifyRequest, reply: FastifyReply): boolean {
+function acceptDemoRequest(request: FastifyRequest, reply: FastifyReply, consume = true): boolean {
   if (!config.demoRequestsPerIpPerDay) return true;
-  const result = demoLimiter.consume(request.ip);
+  const result = consume ? demoLimiter.consume(request.ip) : demoLimiter.check(request.ip);
   reply
     .header("x-ratelimit-limit", config.demoRequestsPerIpPerDay)
     .header("x-ratelimit-remaining", result.remaining)
@@ -559,12 +581,4 @@ function acceptDemoRequest(request: FastifyRequest, reply: FastifyReply): boolea
 // 客户端把界面语言随请求带来，AI 生成文案按该语言输出；缺省中文。
 function requestLanguage(value: unknown): "en" | "zh" {
   return value === "en" ? "en" : "zh";
-}
-
-function multipartFieldValue(fields: unknown, name: string): unknown {
-  if (!fields || typeof fields !== "object") return undefined;
-  const raw = (fields as Record<string, unknown>)[name];
-  const field = Array.isArray(raw) ? raw[0] : raw;
-  if (!field || typeof field !== "object") return undefined;
-  return (field as { value?: unknown }).value;
 }

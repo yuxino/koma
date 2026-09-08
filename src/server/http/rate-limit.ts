@@ -15,14 +15,21 @@ interface Counter {
 export function createDailyLimiter(limit: number) {
   const counters = new Map<string, Counter>();
 
+  function check(key: string, now = Date.now()): DailyLimitResult {
+    if (limit <= 0) return { allowed: true, remaining: Number.MAX_SAFE_INTEGER, resetAt: nextUtcDay(now) };
+    const day = new Date(now).toISOString().slice(0, 10);
+    const current = counters.get(key);
+    const count = current?.day === day ? current.count : 0;
+    return { allowed: count < limit, remaining: Math.max(0, limit - count), resetAt: nextUtcDay(now) };
+  }
+
   return {
+    check,
     consume(key: string, now = Date.now()): DailyLimitResult {
-      if (limit <= 0) return { allowed: true, remaining: Number.MAX_SAFE_INTEGER, resetAt: nextUtcDay(now) };
+      const result = check(key, now);
+      if (limit <= 0 || !result.allowed) return result;
       const day = new Date(now).toISOString().slice(0, 10);
-      const current = counters.get(key);
-      const count = current?.day === day ? current.count : 0;
-      const allowed = count < limit;
-      const nextCount = allowed ? count + 1 : count;
+      const nextCount = limit - result.remaining + 1;
       counters.set(key, { day, count: nextCount });
 
       // Avoid retaining inactive visitor IPs forever on a long-running demo.
@@ -31,7 +38,7 @@ export function createDailyLimiter(limit: number) {
           if (value.day !== day) counters.delete(storedKey);
         }
       }
-      return { allowed, remaining: Math.max(0, limit - nextCount), resetAt: nextUtcDay(now) };
+      return { ...result, remaining: result.remaining - 1 };
     }
   };
 }
