@@ -2,7 +2,7 @@
   <img src="public/koma-logo-round.png" width="112" alt="Koma icon">
   <h1>Koma</h1>
   <p>Understand the video. Find what matters.</p>
-  <p><a href="https://github.com/yuxino/koma/">Star on GitHub</a> · <a href="README.zh-CN.md">简体中文</a></p>
+  <p><a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
 Koma is a self-hosted AI video analysis website. Upload a video or paste a public video link to get summaries, chapters, subtitles, key frames, and the structured data you need. Explore the results alongside the original video, jump to a specific moment, and download the analysis for further use.

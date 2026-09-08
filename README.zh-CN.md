@@ -2,7 +2,7 @@
   <img src="public/koma-logo-round.png" width="112" alt="Koma 图标">
   <h1>Koma</h1>
   <p>看懂视频，找到你关心的内容。</p>
-  <p><a href="https://github.com/yuxino/koma/">在 GitHub 点个 Star</a> · <a href="README.md">English</a></p>
+  <p><a href="README.md">English</a></p>
 </div>
 
 Koma 是一个可自行部署的 AI 视频分析网站。上传视频或粘贴公开视频链接，就能获得总结、章节、字幕、关键帧和需要的结构化数据。对照原视频查看分析结果，跳到关心的时刻，也能下载结果继续使用。
