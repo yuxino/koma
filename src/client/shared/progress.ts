@@ -2,7 +2,7 @@ export type ProgressStepState = "done" | "current" | "waiting";
 
 const englishProgressDetails: Readonly<Record<string, string>> = {
   "任务已经进入处理队列。": "Your video is queued for analysis.",
-  "正在解析视频真实地址。": "Resolving the video URL.",
+  "正在解析视频真实地址。": "Checking the MP4 URL.",
   "正在连接视频源。": "Connecting to the video source.",
   "视频已进入临时空间。": "Video download complete.",
   "正在读取视频尺寸和时长。": "Reading the video dimensions and duration.",

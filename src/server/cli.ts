@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 // Koma headless mode: analyze a local video or video URL and output JSON.
 // Usage:
-//   node dist-server/cli.js <video path or URL> [--json output] [--frames-dir directory]
+//   node dist-server/cli.js <video path or direct MP4 URL> [--json output] [--frames-dir directory]
 // Progress is written to stderr. Analysis output is written to stdout or --json.
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { config } from "./config/config.js";
 import { downloadUrl } from "./media/download.js";
 import { analyzeMedia } from "./application/pipeline.js";
-import { resolveVideoUrl } from "./media/resolver.js";
+import { validateDirectVideoUrl } from "./media/url-source.js";
 import { parseAnalysisSpec, type ArtifactFormat } from "./analysis/analysis-spec.js";
 
 const HELP = `Koma CLI
 
 Usage:
-  node dist-server/cli.js <video path or URL> [options]
+  node dist-server/cli.js <video path or direct MP4 URL> [options]
 
 Options:
   --json <path>        Write analysis result to a JSON file
@@ -26,6 +26,9 @@ Options:
   --artifacts-dir <p>  Save generated files in this directory
   --extraction-only    Output only the requested JSON instead of the full Koma result
   -h, --help           Show help
+
+Remote input: an HTTP(S) URL whose path ends in .mp4 (signed query parameters are supported).
+Platform pages, share links, playlists and login-protected media are not supported.
 `;
 
 interface CliOptions {
@@ -98,13 +101,9 @@ async function main(): Promise<void> {
 async function prepareInput(input: string, tempDir: string): Promise<string> {
   if (/^https?:\/\//i.test(input)) {
     const outputPath = join(tempDir, "input.mp4");
-    // 分享链接（抖音/B站等）先解析成真实播放地址，直链原样使用
-    console.error(`[koma] Resolving ${input}`);
-    const resolved = await resolveVideoUrl(input);
-    if (resolved.title) console.error(`[koma] Title: ${resolved.title}`);
-    console.error(`[koma] Downloading ${resolved.url}`);
-    // 复用 HTTP 服务的下载逻辑：自带时长预检、取消支持和重试
-    await downloadUrl(resolved.url, outputPath, { referer: resolved.referer });
+    const directUrl = validateDirectVideoUrl(input);
+    console.error("[koma] Downloading the supplied MP4 file");
+    await downloadUrl(directUrl, outputPath);
     return outputPath;
   }
   const inputPath = resolve(input);
@@ -157,7 +156,7 @@ function parseArgs(args: string[]): CliOptions {
       throw new Error(`Unexpected argument: ${arg}`);
     }
   }
-  if (!options.input) throw new Error("Provide a video file path or video URL. Use --help for usage.");
+  if (!options.input) throw new Error("Provide a video file path or direct MP4 URL. Use --help for usage.");
   return options;
 }
 

@@ -14,6 +14,7 @@ import {
   type AnalysisSuggestionId
 } from "./analysis-config.js";
 import { parseAnalysisSpec } from "../../../server/analysis/analysis-spec.js";
+import { validateDirectVideoUrl, VideoInputError } from "../../../server/media/url-source.js";
 import { translateServerError } from "../../shared/errors.js";
 import { formatTime } from "../../shared/format.js";
 import { attachFieldDescriptions, summarizeOutputSchema, type OutputSchemaSummary, type PresentedOutputField } from "./output-schema-summary.js";
@@ -43,7 +44,7 @@ const copy = {
   en: {
     stage: {
       queued: "Queued",
-      resolving: "Resolving link",
+      resolving: "Checking MP4 URL",
       downloading: "Fetching video",
       inspecting: "Reading video",
       extracting_frames: "Extracting frames",
@@ -79,12 +80,12 @@ const copy = {
     startOne: "Start an analysis",
     sourceLabel: "Video source",
     upload: "Upload",
-    videoUrl: "Video URL",
+    videoUrl: "MP4 URL",
     drop: "Drop a video here, or choose a file",
     ready: "Ready",
-    publicUrl: "Public video URL",
-    urlPlaceholder: "https://v.douyin.com/… or a direct video URL",
-    urlHint: "Supports Douyin share links, Bilibili, YouTube and other public video URLs.",
+    publicUrl: "Direct MP4 URL",
+    urlPlaceholder: "https://example.com/video.mp4",
+    urlHint: "Paste a downloadable .mp4 URL (signed URLs supported). Platform pages and share links are not supported.",
     temporary: "Saved for permanent replay",
     customExtract: "JSON editor",
     advancedDescription: "Review or edit the JSON shape Koma will return. Leave it empty to let AI decide during analysis.",
@@ -146,7 +147,7 @@ const copy = {
     uploading: "Uploading",
     uploadProgress: "Uploading video",
     missingFile: "Choose a video first.",
-    missingUrl: "Paste a video URL first.",
+    missingUrl: "Paste a direct MP4 URL first.",
     startFailed: "Could not start the analysis.",
     jobMissing: "This analysis could not be found.",
     analyzingRemote: "ANALYZING · REMOTE VIDEO",
@@ -212,7 +213,7 @@ const copy = {
     aboutTitle: "How to use Koma",
     aboutText: "From a plain-language request to a replayable analysis and structured JSON.",
     aboutSteps: [
-      { title: "1 · Describe the result", text: "Upload a local video or paste a public URL, then describe what you need. Quick additions can be combined, and AI can turn the full request into editable JSON." },
+      { title: "1 · Describe the result", text: "Upload a local video or paste a direct MP4 URL, then describe what you need. Quick additions can be combined, and AI can turn the full request into editable JSON." },
       { title: "2 · Review the result", text: "Koma combines audio and key frames into a summary, chapters, tags, subtitles, and structured data. Click any timestamp, subtitle, chapter, tag, or key frame to return to that moment." },
       { title: "3 · Return from My jobs", text: "Your library belongs to your GitHub account. Search titles and summaries, reopen a running analysis, retry failed jobs when their source is available, or delete your own files." },
       { title: "4 · Private records and administration", text: "New videos are private to your account; copied links require the same account. Older unclaimed replay links keep their previous access. Manage remains a separate administrator area for providers and global job management." }
@@ -224,7 +225,7 @@ const copy = {
   zh: {
     stage: {
       queued: "排队中",
-      resolving: "解析链接",
+      resolving: "检查 MP4 直链",
       downloading: "取回视频",
       inspecting: "读取视频",
       extracting_frames: "抽取画面",
@@ -260,12 +261,12 @@ const copy = {
     startOne: "开始一次分析",
     sourceLabel: "视频来源",
     upload: "本地视频",
-    videoUrl: "视频地址",
+    videoUrl: "MP4 直链",
     drop: "拖进来，或点这里选择",
     ready: "已准备好",
-    publicUrl: "公开的视频地址",
-    urlPlaceholder: "https://v.douyin.com/… 或视频直链",
-    urlHint: "支持抖音分享链接、B站、YouTube 等公开链接与视频直链。",
+    publicUrl: "MP4 视频直链",
+    urlPlaceholder: "https://example.com/video.mp4",
+    urlHint: "仅支持可直接下载的 .mp4 直链（可带签名参数），不解析第三方平台页面或分享链接。",
     temporary: "保存为可永久回看的任务",
     customExtract: "JSON 编辑器",
     advancedDescription: "检查或修改 Koma 将返回的 JSON 结构。留空时，分析过程中由 AI 自行决定。",
@@ -327,7 +328,7 @@ const copy = {
     uploading: "正在上传",
     uploadProgress: "正在上传视频",
     missingFile: "先放入一个小视频",
-    missingUrl: "先粘贴一个视频地址",
+    missingUrl: "先粘贴一个 MP4 视频直链",
     startFailed: "没有成功开始分析",
     jobMissing: "找不到这次分析",
     analyzingRemote: "ANALYZING · REMOTE VIDEO",
@@ -393,7 +394,7 @@ const copy = {
     aboutTitle: "如何使用 Koma",
     aboutText: "用一句话描述要求，得到可回看、可定位的分析结果和结构化 JSON。",
     aboutSteps: [
-      { title: "1 · 说清楚想要什么", text: "上传本地视频或粘贴公开视频地址，再直接描述结果要包含什么。快速补充可以同时选择，也可以让 AI 先整理成可编辑的 JSON。" },
+      { title: "1 · 说清楚想要什么", text: "上传本地视频或粘贴 MP4 视频直链，再直接描述结果要包含什么。快速补充可以同时选择，也可以让 AI 先整理成可编辑的 JSON。" },
       { title: "2 · 查看分析结果", text: "Koma 会结合声音和关键帧生成总结、章节、标签、字幕与结构化数据。点击时间、字幕、章节、标签或关键帧，都能跳回视频对应位置。" },
       { title: "3 · 回到自己的资料库", text: "资料库跟随你的 GitHub 账号。可以搜索标题和摘要、重新打开任务、在来源可用时重试失败的分析，也可以删除自己的视频和文件。" },
       { title: "4 · 私人记录与管理", text: "新视频仅本人账号可见，复制的链接也需要登录同一账号。未认领的旧版回看链接保留原有访问方式。“管理”仍是独立的管理员入口，用于配置模型和管理全部任务。" }
@@ -825,7 +826,8 @@ function App({ initialLanguage }: { initialLanguage?: Language } = {}) {
         window.history.replaceState({}, "", `/jobs/${jobId}`);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
-        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json", ...analysisAccessHeaders }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: composedInstruction || undefined, outputSchema: parsedOutputSchema }) });
+        const directUrl = validateDirectVideoUrl(url);
+        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json", ...analysisAccessHeaders }, body: JSON.stringify({ url: directUrl, lang: language, instruction: composedInstruction || undefined, outputSchema: parsedOutputSchema }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
         if (!isCurrent()) return;
         if (response.status === 401) auth.expire();
@@ -845,7 +847,7 @@ function App({ initialLanguage }: { initialLanguage?: Language } = {}) {
       const message = submitError instanceof Error ? submitError.message : String(submitError);
       const clientMessage = message === t.missingFile || message === t.missingUrl || message === t.invalidSchema || message === t.requestTooLong;
       setError(clientMessage ? message : translateServerError(message, language));
-      if (message === t.missingUrl) urlInputRef.current?.focus();
+      if (message === t.missingUrl || submitError instanceof VideoInputError) urlInputRef.current?.focus();
       if (message === t.missingFile) dropZoneRef.current?.focus();
     } finally {
       if (isCurrent()) {

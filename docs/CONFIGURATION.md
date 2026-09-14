@@ -194,16 +194,16 @@ Koma explicitly writes new OSS objects with a private ACL and privatizes a legac
 
 ## Processing pipeline
 
-1. Resolve a supported video URL or accept a local upload.
+1. Validate and download the supplied MP4 file, or accept a local upload.
 2. Use FFmpeg to extract representative frames.
 3. Transcribe audio with the selected ASR provider.
 4. Analyze key frames and subtitles with the selected vision provider.
 5. Store the source video, frames, and generated files; persist the complete result record; then delete intermediate audio and the working directory.
 
-## Supported sites
+## Supported inputs
 
-Native parsing is available for Douyin and Bilibili (`BV` and `b23.tv` links).
+Local uploads retain the existing supported video formats. Remote input accepts only a direct HTTP(S) URL whose path ends in `.mp4` (case-insensitive). Signed query parameters are preserved. Extensionless endpoints, platform pages, share links or text, and playlists are not supported.
 
-When yt-dlp is installed, it is used as a fallback for sites such as YouTube, TikTok, Xiaohongshu, Weibo, and Tencent Video. Availability depends on the installed yt-dlp version and each site's anti-bot behavior.
+Koma downloads the supplied file without platform APIs, page parsing, cookie registration, browser impersonation, or extractor fallbacks. Every redirect must also be a direct MP4 URL. It checks the response type, MP4 file signature, byte limit, and local video metadata before analysis. Generic binary responses are accepted only when the downloaded file passes those checks. It never follows a returned page to find a video.
 
-Douyin image posts, login- or subscription-only content, and Kuaishou are not currently supported.
+Embedded credentials and local/private address literals are rejected; login- and subscription-protected links are unsupported. This is not DNS pinning: public deployments still need an egress policy or trusted URL allowlist to protect against hostnames resolving to private networks.

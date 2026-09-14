@@ -3,59 +3,88 @@ import { rm } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { config } from "../config/config.js";
-import { headersForVideoUrl } from "./url-source.js";
-import { inspectVideo, probeRemoteVideoDuration } from "./video.js";
+import { headersForVideoUrl, validateDirectVideoUrl, VideoInputError } from "./url-source.js";
+import { inspectVideo } from "./video.js";
 
 export interface DownloadResult {
   contentType: string;
 }
 
 type ProgressCallback = (percent: number, detail: string) => void;
+const MAX_REDIRECTS = 5;
+const MAX_FILE_TYPE_BYTES = 64 * 1024;
+const MP4_BRANDS = new Set(["isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9", "mp41", "mp42", "avc1", "M4V ", "MSNV", "dash"]);
+const NOT_MP4 = "这个地址不是有效的 MP4 视频文件，请上传本地视频或提供 MP4 直链。";
 
-// 把真实播放地址下载成临时文件；下载过程通过 onProgress 回报 8%–11% 的进度，
-// 避免用户长时间只看到“正在放入…”没有任何反馈。
+/** Follow file-to-file redirects only; never visit a share page or extract a player URL. */
+async function fetchDirectMp4(url: string, signal: AbortSignal): Promise<Response> {
+  let current = validateDirectVideoUrl(url);
+  for (let redirects = 0; ; redirects += 1) {
+    signal.throwIfAborted();
+    const response = await fetch(current, {
+      redirect: "manual",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      headers: headersForVideoUrl(current),
+      signal
+    });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get("location");
+    await response.body?.cancel().catch(() => undefined);
+    if (!location || redirects >= MAX_REDIRECTS) throw new VideoInputError("MP4 直链重定向无效或次数太多。");
+    // Validation happens before the next request, including private-host and .mp4 checks.
+    try { current = validateDirectVideoUrl(new URL(location, current).href); }
+    catch (error) { throw error instanceof VideoInputError ? error : new VideoInputError(NOT_MP4); }
+  }
+}
+
+// Download only the supplied MP4 file, then inspect it locally. No remote pre-probe or page parsing.
 export async function downloadUrl(
   url: string,
   outputPath: string,
-  { referer, signal, onProgress }: { referer?: string; signal?: AbortSignal; onProgress?: ProgressCallback } = {}
+  { signal, onProgress }: { signal?: AbortSignal; onProgress?: ProgressCallback } = {}
 ): Promise<DownloadResult> {
-  // 请求头在探测与下载之间保持一致（部分视频源按 referer/UA 校验）
-  const requestHeaders = { ...headersForVideoUrl(url), ...(referer ? { referer } : {}) };
-
-  // 下载前先探测时长：faststart 视频用 Range 请求就能拿到元数据，
-  // 超长直接拒绝，避免把整段视频拉下来才发现超时。
-  const probedMs = await probeRemoteVideoDuration(url, requestHeaders, { signal });
-  if (probedMs !== null && probedMs > config.maxDurationSeconds * 1000) {
-    throw new Error(`视频太长了，第一版最多支持 ${Math.round(config.maxDurationSeconds / 60)} 分钟。`);
-  }
-
+  signal?.throwIfAborted();
+  const directUrl = validateDirectVideoUrl(url);
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let response: Response | undefined;
     try {
+      signal?.throwIfAborted();
       await rm(outputPath, { force: true });
       onProgress?.(8, "正在连接视频源。");
-      const response = await fetch(url, {
-        redirect: "follow",
-        headers: { ...requestHeaders, "accept-encoding": "identity" },
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
-      });
-      if (signal?.aborted) throw new DOMException("分析已取消。", "AbortError");
-      if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，没有解析出可下载的视频文件。抖音/B站分享链接可能被风控或是图文笔记，也可以换成视频直链试试。");
-      const contentLength = Number(response.headers.get("content-length") || 0);
-      if (contentLength > config.maxUploadBytes) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
+      const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000);
+      response = await fetchDirectMp4(directUrl, requestSignal);
+      requestSignal.throwIfAborted();
+      if (!response.ok || !response.body) {
+        const message = `视频地址无法访问：${response.status}`;
+        if (response.status < 500 && response.status !== 429) throw new VideoInputError(message);
+        throw new Error(message);
+      }
+      // A partial response to our full GET must not be saved as the original video.
+      if (response.status !== 200) throw new VideoInputError(NOT_MP4);
+      const contentType = (response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+      if (contentType && !["video/mp4", "application/mp4", "application/octet-stream"].includes(contentType)) {
+        throw new VideoInputError(NOT_MP4);
+      }
+      const declaredLength = Number(response.headers.get("content-length") || 0);
+      const contentLength = Number.isSafeInteger(declaredLength) && declaredLength > 0 ? declaredLength : 0;
+      if (contentLength > config.maxUploadBytes) throw new VideoInputError(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
       const stream = Readable.fromWeb(response.body as import("node:stream/web").ReadableStream);
-      const bytes = await streamToFile(stream, outputPath, config.maxUploadBytes, contentLength, onProgress);
-      if (!bytes) throw new Error("视频下载结果为空。");
+      const bytes = await streamToFile(stream, outputPath, config.maxUploadBytes, contentLength, onProgress, requestSignal, true);
+      if (!bytes) throw new VideoInputError(NOT_MP4);
       if (contentLength && bytes !== contentLength) throw new Error(`视频下载不完整（收到 ${bytes} / ${contentLength} 字节）。`);
-      await inspectVideo(outputPath, { signal });
+      const media = await inspectVideo(outputPath, { signal: requestSignal });
+      if (!media.hasVideo) throw new VideoInputError("这个文件里没有视频画面，请换一个带画面的视频。");
       onProgress?.(12, "视频已进入临时空间。");
-      return { contentType };
+      return { contentType: "video/mp4" };
     } catch (error) {
       lastError = error;
+      if (response?.body && !response.body.locked) await response.body.cancel().catch(() => undefined);
+      await rm(outputPath, { force: true }).catch(() => undefined);
+      if (signal?.aborted) throw new DOMException("分析已取消。", "AbortError");
       if (error instanceof DOMException && error.name === "AbortError") throw error;
-      if (error instanceof Error && (error.message.startsWith("视频太长") || error.message.includes("不是可直接下载的视频"))) throw error;
+      if (error instanceof VideoInputError || (error instanceof Error && /视频太长|视频太大/.test(error.message))) throw error;
       if (attempt < 3) onProgress?.(8, `视频没有完整到达，正在重新取回（${attempt}/3）。`);
     }
   }
@@ -68,14 +97,31 @@ export async function streamToFile(
   maxBytes: number,
   contentLength = 0,
   onProgress?: ProgressCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  requireMp4 = false
 ): Promise<number> {
   let bytes = 0;
   let lastReportedPercent = -1;
+  let fileTypeChecked = !requireMp4;
+  let header: Buffer = Buffer.alloc(0);
   const counter = new Transform({
     transform(chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: Buffer) => void) {
       bytes += chunk.length;
-      if (bytes > maxBytes) return callback(new Error(`视频太大了，第一版最多支持 ${Math.round(maxBytes / 1024 / 1024)} MB。`));
+      if (bytes > maxBytes) return callback(new VideoInputError(`视频太大了，第一版最多支持 ${Math.round(maxBytes / 1024 / 1024)} MB。`));
+      if (!fileTypeChecked) {
+        header = Buffer.concat([header, chunk.subarray(0, MAX_FILE_TYPE_BYTES - header.length)]);
+        if (header.length >= 8) {
+          const size = header.readUInt32BE(0);
+          if (header.toString("ascii", 4, 8) !== "ftyp" || size < 16 || size > MAX_FILE_TYPE_BYTES || size % 4 !== 0) return callback(new VideoInputError(NOT_MP4));
+          if (header.length >= size) {
+            const brands = [header.toString("ascii", 8, 12)];
+            for (let offset = 16; offset < size; offset += 4) brands.push(header.toString("ascii", offset, offset + 4));
+            if (!brands.some((brand) => MP4_BRANDS.has(brand))) return callback(new VideoInputError(NOT_MP4));
+            fileTypeChecked = true;
+            header = Buffer.alloc(0);
+          }
+        }
+      }
       if (contentLength && onProgress) {
         const percent = 8 + Math.floor((bytes / contentLength) * 4);
         if (percent !== lastReportedPercent) {
@@ -84,7 +130,8 @@ export async function streamToFile(
         }
       }
       callback(null, chunk);
-    }
+    },
+    flush(callback) { callback(fileTypeChecked ? null : new VideoInputError(NOT_MP4)); }
   });
   await pipeline(readable, counter, createWriteStream(outputPath), { signal });
   return bytes;

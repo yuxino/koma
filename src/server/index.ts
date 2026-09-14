@@ -1,7 +1,6 @@
 import { createReadStream } from "node:fs";
 import { copyFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { isIP } from "node:net";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import { config } from "./config/config.js";
@@ -10,8 +9,7 @@ import { getTempAudio } from "./media/temp-audio.js";
 import { enqueueAnalysis } from "./application/pipeline.js";
 import { retainedInputPath } from "./application/retry-source.js";
 import { streamToFile } from "./media/download.js";
-import { extractUrlFromText } from "./media/resolver.js";
-import { normalizeVideoUrl } from "./media/url-source.js";
+import { validateDirectVideoUrl } from "./media/url-source.js";
 import { parseByteRange } from "./media/video-stream.js";
 import { createDailyLimiter } from "./http/rate-limit.js";
 import { observeMultipartCompletion } from "./http/multipart-completion.js";
@@ -243,7 +241,7 @@ app.post<{ Params: { id: string } }>("/api/my/jobs/:id/retry", { onRequest: requ
   const previous = await loadJob(request.params.id);
   if (!previous) return reply.code(404).send({ error: "找不到这次分析。" });
   if (previous.status !== "failed") return reply.code(409).send({ error: "只有失败的任务可以重试。" });
-  if (!await canRetryJob(previous)) return reply.code(409).send({ error: "原视频已不可用，请重新上传或粘贴视频链接。" });
+  if (!await canRetryJob(previous)) return reply.code(409).send({ error: "原视频已不可用，请重新上传或粘贴 MP4 直链。" });
   if (!acceptDemoRequest(request, reply)) return;
   let next: Job | undefined;
   try {
@@ -267,7 +265,7 @@ app.post<{ Params: { id: string } }>("/api/my/jobs/:id/retry", { onRequest: requ
     return reply.header("cache-control", "no-store").code(202).send({ jobId: next.id });
   } catch {
     if (next) await deleteJob(next.id);
-    return reply.code(409).send({ error: "暂时无法读取原视频，请重新上传或粘贴视频链接。" });
+    return reply.code(409).send({ error: "暂时无法读取原视频，请重新上传或粘贴 MP4 直链。" });
   }
 });
 
@@ -323,9 +321,7 @@ app.post("/api/analyze/url", { onRequest: requireAnalysisAccess }, async (reques
   let job: Job | undefined;
   try {
     const body = request.body as { url?: unknown; lang?: unknown; instruction?: unknown; outputSchema?: unknown; artifactFormats?: unknown } | undefined;
-    const rawUrl = body?.url;
-    const url = normalizeVideoUrl(extractUrlFromText(rawUrl) || (typeof rawUrl === "string" ? rawUrl.trim() : ""));
-    validateVideoUrl(url);
+    const url = validateDirectVideoUrl(body?.url);
     const analysisSpec = parseAnalysisSpec({ instruction: body?.instruction, outputSchema: body?.outputSchema, artifactFormats: body?.artifactFormats });
     if (!acceptDemoRequest(request, reply)) return;
     const user = await requireAccount(request, reply);
@@ -333,7 +329,7 @@ app.post("/api/analyze/url", { onRequest: requireAnalysisAccess }, async (reques
     const accountId = user.id;
     job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang), analysisSpec, accountId, sourceUrl: url });
     job.sourceUrl = url;
-    updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
+    updateJob(job, { progress: { stage: "queued", percent: 5, detail: "任务已经进入处理队列。" } });
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
@@ -476,7 +472,13 @@ async function canAccessJob(request: FastifyRequest, jobId: string) {
 async function canRetryJob(job: Job): Promise<boolean> {
   if (job.status !== "failed") return false;
   job.sourceUrl ||= await readJobSource(job.id) || undefined;
-  return Boolean(job.sourceUrl || (job.inputObjectKey && job.mediaAvailable) || await retainedInputPath(job));
+  if ((job.inputObjectKey && job.mediaAvailable) || await retainedInputPath(job)) return true;
+  try {
+    validateDirectVideoUrl(job.sourceUrl);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function accountHistoryRecord(record: JobHistoryRecord) {
@@ -531,21 +533,6 @@ function publicHistoryRecord(job: JobHistoryRecord) {
     mediaAvailable: job.mediaAvailable,
     error: job.error
   };
-}
-
-function validateVideoUrl(value: string): void {
-  if (typeof value !== "string" || !value.trim()) throw new Error("请输入视频地址。");
-  const parsed = new URL(value);
-  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("只支持 http 或 https 视频地址。");
-  if (isPrivateHost(parsed.hostname)) throw new Error("不支持访问本机或内网地址。");
-}
-
-function isPrivateHost(hostname: string): boolean {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (["localhost", "0.0.0.0", "::1"].includes(normalized) || normalized.endsWith(".local") || normalized.endsWith(".internal")) return true;
-  if (isIP(normalized) !== 4) return isIP(normalized) === 6 && (normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:"));
-  const octets = normalized.split(".").map(Number);
-  return octets[0] === 10 || octets[0] === 127 || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) || (octets[0] === 192 && octets[1] === 168) || (octets[0] === 169 && octets[1] === 254);
 }
 
 function extensionFor(filename: string): string {

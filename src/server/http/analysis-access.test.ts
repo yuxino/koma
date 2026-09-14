@@ -34,7 +34,7 @@ beforeAll(async () => {
       ASR_PROVIDER: "mock",
       VISION_PROVIDER: "mock",
       ANALYSIS_PROVIDER: "mock",
-      DEMO_REQUESTS_PER_IP_PER_DAY: "0",
+      DEMO_REQUESTS_PER_IP_PER_DAY: "1",
       ADMIN_PASSWORD: "test-admin-password",
       ANALYSIS_REQUIRE_ADMIN: "true"
     },
@@ -92,6 +92,31 @@ describe("private analysis access", () => {
       expect(response.status).toBe(403);
     }
   });
+  it("rejects platform/share inputs before creating jobs or consuming the demo allowance", async () => {
+    const login = await fetch(`${baseUrl}/api/admin/login`, {
+      method: "POST", headers: { ...jsonHeaders, "x-koma-admin": "1" }, body: JSON.stringify({ password: "test-admin-password" })
+    });
+    const cookie = `koma_session=${"t".repeat(43)}; ${login.headers.get("set-cookie")!.split(";", 1)[0]}`;
+    const headers = { ...jsonHeaders, "x-koma-client": "1", cookie };
+    for (const url of [
+      "https://v.douyin.com/example/", "https://www.bilibili.com/video/BV1xx411c7mD", "https://b23.tv/example",
+      "https://www.youtube.com/watch?v=test", "https://xhslink.com/example", "https://example.com/page?file=video.mp4",
+      "copy https://example.com/video.mp4", "http://127.0.0.1/video.mp4", "https://user:pass@example.com/video.mp4"
+    ]) {
+      const response = await fetch(`${baseUrl}/api/analyze/url`, { method: "POST", headers, body: JSON.stringify({ url }) });
+      expect(response.status, url).toBe(400);
+    }
+    const database = new DatabaseSync(join(root, "koma.sqlite"));
+    try { expect(database.prepare("SELECT COUNT(*) AS count FROM koma_jobs").get()?.count).toBe(0); }
+    finally { database.close(); }
+    // A real valid request still has its one shared allowance; mock providers do no external I/O.
+    const body = JSON.stringify({ instruction: "Summarize this video" });
+    const available = await fetch(`${baseUrl}/api/analysis-spec/generate`, { method: "POST", headers, body });
+    expect(available.status).toBe(503);
+    const consumed = await fetch(`${baseUrl}/api/analysis-spec/generate`, { method: "POST", headers, body });
+    expect(consumed.status).toBe(429);
+  });
+
 });
 
 async function availablePort(): Promise<number> {

@@ -1,5 +1,4 @@
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -17,69 +16,6 @@ export interface MediaInfo {
   hasVideo: boolean;
   hasAudio: boolean;
   hasNativeSubtitles: boolean;
-}
-
-// 下载前探测远程视频的时长，避免把整段视频拉下来才发现超长。
-// 只请求视频开头的一段（faststart 视频的 moov 元数据在开头，通常几百 KB 内），
-// 用 ffprobe 读本地临时文件拿时长；服务器不支持 Range、视频非 faststart 或
-// 探测失败时返回 null，由调用方退回“完整下载后再检查”的兜底。
-const PROBE_HEAD_BYTES = 4 * 1024 * 1024;
-
-export async function probeRemoteVideoDuration(
-  url: string,
-  headers: Record<string, string>,
-  options: { signal?: AbortSignal; timeoutMs?: number; tempRoot?: string } = {}
-): Promise<number | null> {
-  const { signal, timeoutMs = 15_000, tempRoot = config.tempRoot } = options;
-  const probePath = join(tempRoot, `koma-probe-${randomUUID()}.mp4`);
-  try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      headers: { ...headers, range: `bytes=0-${PROBE_HEAD_BYTES - 1}`, "accept-encoding": "identity" },
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
-    });
-    if (!response.ok || !response.body) return null;
-    // 非视频响应（风控页、网页等）直接放弃探测
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("text/html") || contentType.includes("text/plain")) return null;
-    // 服务器可能忽略 Range 返回完整内容，也可能小文件一次给完：
-    // 按 content-length（若存在）与探测上限的较小值读取，避免读空 body 抛错。
-    const declaredLength = Number(response.headers.get("content-length") || 0);
-    const readLimit = declaredLength > 0 ? Math.min(PROBE_HEAD_BYTES, declaredLength) : PROBE_HEAD_BYTES;
-    const reader = response.body.getReader();
-    let received = 0;
-    const chunks: Buffer[] = [];
-    try {
-      while (received < readLimit) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const remaining = readLimit - received;
-        const chunk = value.length > remaining ? value.subarray(0, remaining) : value;
-        chunks.push(Buffer.from(chunk));
-        received += chunk.length;
-        if (chunk.length < value.length) break; // 到达探测上限，提前截断
-      }
-    } finally {
-      await reader.cancel().catch(() => undefined);
-    }
-    if (received < 1024) return null;
-    await mkdir(tempRoot, { recursive: true });
-    await writeFile(probePath, Buffer.concat(chunks, received));
-    const output = await runCommand(ffprobeBin, [
-      "-v", "error",
-      "-show_entries", "format=duration",
-      "-of", "json",
-      probePath
-    ], signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000));
-    const parsed = JSON.parse(output.stdout) as { format?: { duration?: string } };
-    const seconds = Number.parseFloat(parsed.format?.duration || "0");
-    return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : null;
-  } catch {
-    // 探测失败（超时、网络错误等）交给下载后的完整检查
-    return null;
-  } finally {
-    await rm(probePath, { force: true }).catch(() => undefined);
-  }
 }
 
 export interface FrameInfo {

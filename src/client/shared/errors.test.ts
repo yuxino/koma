@@ -21,6 +21,13 @@ describe("translateServerError", () => {
     expect(translateServerError("生成 JSON 配置需要先配置真实的视觉模型。", "en")).toContain("configured vision model");
   });
 
+  it("explains direct MP4 validation in English without suggesting platform extraction", () => {
+    expect(translateServerError("请输入 MP4 视频直链。", "en")).toBe("Please enter a direct MP4 URL.");
+    expect(translateServerError("只支持可直接下载的 MP4 直链，不支持第三方平台页面、分享链接或分享文案。", "en")).toContain("not platform pages");
+    expect(translateServerError("这个地址不是有效的 MP4 视频文件，请上传本地视频或提供 MP4 直链。", "en")).toContain("valid MP4 video");
+    expect(translateServerError("MP4 直链重定向无效或次数太多。", "en")).toContain("redirect");
+  });
+
   it("maps speaker diarization errors to English", () => {
     expect(translateServerError("听写任务提交失败：401", "en")).toBe("Transcription failed. Please try again.");
     expect(translateServerError("听写任务失败：音频无法下载", "en")).toBe("Transcription failed. Please try again.");

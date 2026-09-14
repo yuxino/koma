@@ -9,7 +9,7 @@ Koma is a self-hosted AI video analysis website. Upload a video or paste a publi
 
 ## Features
 
-- Upload a local video or paste a Douyin/Bilibili link. Install `yt-dlp` for YouTube and more sites.
+- Upload a local video or paste a downloadable MP4 URL (`.mp4` paths, including signed query parameters). No third-party platform or share-link parsing.
 - Combine speech and key frames into summaries, chapters, tags, subtitles, and frame descriptions.
 - Jump from a chapter, tag, subtitle, or frame to the matching moment. Search the transcript and export the result as Markdown or subtitles as SRT.
 - Start with a lesson, interview/meeting, or product analysis. Describe the fields you need, review the editable JSON structure and field explanations before analysis, save it in the browser, and request JSON, CSV, Markdown, SRT, or TXT output.
@@ -37,7 +37,7 @@ If saving a fully received video to OSS fails, Koma retains the complete local c
 
 Older unclaimed replay links keep their previous read-only access. From the browser that submitted those jobs, you can explicitly move them into your account; this restricts future replay and stored-object access. Earlier downloads or cached public copies cannot be recalled. Jobs without proof of browser ownership are never automatically assigned. See [Administration](docs/ADMIN.md#existing-jobs-and-migration).
 
-Uploads default to 500 MB and 15 minutes; login-only and subscription-only videos are unsupported, and fallback site availability depends on `yt-dlp` and each site's anti-bot behavior. `ADMIN_PASSWORD` protects `/admin`; `ANALYSIS_REQUIRE_ADMIN=true` requires an administrator session in addition to GitHub sign-in. The URL importer is not a complete SSRF boundary, so use an egress policy or trusted URL allowlist before exposing submission to untrusted users.
+Uploads default to 500 MB and 15 minutes. Remote input must be a direct HTTP(S) MP4 file; platform pages, share text, playlists, and login- or subscription-protected links are not supported. Koma checks the response and file contents rather than trusting the filename alone. `ADMIN_PASSWORD` protects `/admin`; `ANALYSIS_REQUIRE_ADMIN=true` requires an administrator session in addition to GitHub sign-in. The URL importer is not a complete SSRF boundary, so use an egress policy or trusted URL allowlist before exposing submission to untrusted users.
 
 ## CLI
 

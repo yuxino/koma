@@ -69,7 +69,10 @@ The endpoint is available only when a real vision provider and its credentials a
 
 Errors are `400` for invalid input, `401` when the account session is missing, `403` when a request guard or the optional administrator requirement fails, `413` for an oversized body, `429` when the demo allowance is exhausted, `502` when the provider request fails or the repaired response is invalid, and `503` when the vision provider is unavailable or not configured.
 
-## Video URL
+## Direct MP4 URL
+
+The `url` must be an HTTP(S) file URL whose path ends in `.mp4` (case-insensitive); signed query parameters are supported. Platform pages, share links/text, playlists, extensionless endpoints, embedded credentials, and local/private address literals are rejected with `400` before a job is created or the demo allowance is consumed. No platform parsing or extractor fallback is performed.
+
 
 ```bash
 curl -X POST http://localhost:3000/api/analyze/url \
@@ -88,13 +91,13 @@ curl -X POST http://localhost:3000/api/analyze/url \
   }'
 ```
 
-The endpoint responds with `202`. The ID also forms the private replay route `/jobs/JOB_ID`:
+A valid submission responds with `202`. This accepts the input for processing; it does not guarantee that the remote file is accessible. Downloading, response/file-type checks, size/duration limits, and local video inspection run asynchronously; failures are reported on the job before AI analysis. Redirect targets must also be direct MP4 URLs. The ID also forms the private replay route `/jobs/JOB_ID`:
 
 ```json
 { "jobId": "..." }
 ```
 
-URL submission requires GitHub sign-in. Koma does not yet comprehensively block redirects or hostnames that resolve to private or link-local addresses. Authentication limits who can call this endpoint, but it is not an outbound network boundary; deployments admitting untrusted users still need an egress policy or a trusted URL allowlist.
+URL submission requires GitHub sign-in. Koma validates the initial URL and every redirect, but does not pin DNS or comprehensively block hostnames that resolve to private or link-local addresses. Authentication limits who can call this endpoint, but it is not an outbound network boundary; deployments admitting untrusted users still need an egress policy or a trusted URL allowlist.
 
 ## Local upload
 
@@ -159,7 +162,7 @@ Personal history follows the GitHub account across browsers. All routes below re
 
 Claiming adds account ownership and restricts future replay and origin-object access. It does not recall previously downloaded files or cached public responses. It never assigns jobs from another browser or overrides an existing account owner. No valid legacy cookie means an empty list and zero claimed jobs; clearing that cookie cannot be undone by supplying a job ID. Claiming can return `503` if private object permissions cannot be applied, without assigning the jobs to the account.
 
-Retry is available only for a failed job with a saved source URL or retained video. It copies the original language and analysis request, uses the currently configured providers, and keeps the original failed job. Retained media is preferred over downloading the URL again. A running/completed job, absent source, or unreadable retained video returns `409`; another account's job returns `404`. The normal analysis access checks and per-IP demo allowance also apply to retries. A saved URL may still expire or fail at the source site during the new analysis.
+Retry is available only for a failed job with a valid direct MP4 source URL or retained video. A legacy platform URL alone is not retryable; already retained video from an older job can still be reused. It copies the original language and analysis request, uses the currently configured providers, and keeps the original failed job. Retained media is preferred over downloading the URL again. A running/completed job, absent source, or unreadable retained video returns `409`; another account's job returns `404`. The normal analysis access checks and per-IP demo allowance also apply to retries. A saved URL may still expire or fail at the source site during the new analysis.
 
 `DELETE /api/jobs/:id` returns `405`; use the account or administration delete route instead. Deleting a job removes both its persistent record and storage prefix. There is no API for making a new account-owned job public.
 

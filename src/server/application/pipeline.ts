@@ -5,7 +5,7 @@ import { analyze } from "../analysis/analysis.js";
 import { transcribe, transcribeFullAudio } from "../media/asr.js";
 import { downloadUrl } from "../media/download.js";
 import { flushJob, getJobAbortSignal, releaseWorkingDirectory, updateJob, type AnalysisResult, type Job, type JobProgress } from "./jobs.js";
-import { resolveVideoUrl } from "../media/resolver.js";
+import { prepareDirectVideoUrl } from "../media/url-source.js";
 import { createSemaphore } from "../shared/semaphore.js";
 import { extractAudioSegments, extractFrames, inspectVideo } from "../media/video.js";
 import type { AnalysisSpec } from "../analysis/analysis-spec.js";
@@ -131,15 +131,13 @@ async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
   try {
     updateJob(job, { status: "processing" });
     if (job.sourceUrl) {
-      // 视频地址任务：在后台解析真实地址并下载，全程回报进度，提交接口不再阻塞
-      const resolved = await resolveVideoUrl(job.sourceUrl, { signal });
+      // Only validate and download the supplied MP4 file; never resolve a third-party page.
+      const directUrl = await prepareDirectVideoUrl(job.sourceUrl, { signal });
       throwIfAborted(signal);
-      if (resolved.title) updateJob(job, { title: resolved.title });
       updateJob(job, { progress: { stage: "downloading", percent: 8, detail: "正在把视频放入临时空间。" } });
       inputPath = join(job.dir, "input.mp4");
       job.inputPath = inputPath;
-      const download = await downloadUrl(resolved.url, inputPath, {
-        referer: resolved.referer,
+      const download = await downloadUrl(directUrl, inputPath, {
         signal,
         onProgress: (percent, detail) => updateJob(job, { progress: { stage: "downloading", percent, detail } })
       });
