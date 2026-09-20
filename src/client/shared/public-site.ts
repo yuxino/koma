@@ -10,13 +10,13 @@ export function publicLanguage(pathname: string): PublicLanguage | undefined {
 }
 
 const descriptions = {
-  en: "Koma is a self-hosted AI video analysis website. Turn uploaded videos or direct MP4 URLs into summaries, chapters, searchable subtitles, key frames, and structured data.",
-  zh: "Koma 是可自行部署的 AI 视频分析网站。上传视频或粘贴 MP4 视频直链，生成摘要、章节、可搜索字幕、关键帧与结构化数据，对照原片回看并下载结果。"
+  en: "Koma is a self-hosted AI video analysis tool for lessons, interviews, and demos. Turn uploads or direct MP4 URLs into summaries, searchable transcripts, chapters, key frames, and structured data; export Markdown, SRT, or JSON.",
+  zh: "Koma 是可自行部署的 AI 视频总结与分析工具。上传课程、访谈或演示视频，或粘贴 MP4 视频直链，提取可搜索字幕、章节、关键帧与自定义数据，导出 Markdown、SRT 或 JSON。"
 };
 const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
 export function pageMetadata(language: PublicLanguage, indexable = true): string {
-  const title = language === "zh" ? "Koma — AI 视频分析、字幕与关键帧" : "Koma — AI Video Analysis, Subtitles & Key Frames";
+  const title = language === "zh" ? "Koma — AI 视频总结、字幕提取与关键帧分析" : "Koma — AI Video Summaries, Transcription & Key Frames";
   const base = `<title data-koma-seo>${escapeHtml(title)}</title>`;
   if (!indexable) return `${base}\n<meta data-koma-seo name="robots" content="noindex, nofollow, noarchive" />`;
   const url = PUBLIC_ORIGIN + publicPath(language);

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "AI-powered video understanding with key frames, transcription, and highlights.",
+  "description": "Self-hosted AI video analysis with summaries, searchable transcripts, chapters, key frames, and structured data export.",
   "engines": {
     "node": ">=22.13.0"
   },
