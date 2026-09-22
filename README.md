@@ -1,11 +1,11 @@
 <div align="center">
   <img src="public/koma-logo-round.png" width="112" alt="Koma icon">
   <h1>Koma</h1>
-  <p>Understand the video. Find what matters.</p>
+  <p>Summarize videos, search subtitles, and jump back to the source.</p>
   <p><a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Koma is a self-hosted AI video analysis website. Upload a video or paste a public video link to get summaries, chapters, subtitles, key frames, and the structured data you need. Explore the results alongside the original video, jump to a specific moment, and download the analysis for further use.
+Koma is a self-hosted AI video analysis website. Upload a video or paste a direct MP4 URL to generate a summary, chapters, searchable subtitles, and key frames. Click a result to return to that moment in the video, or export the analysis and custom data fields for your notes or spreadsheet.
 
 ## Features
 

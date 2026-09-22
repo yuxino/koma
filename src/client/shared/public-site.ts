@@ -10,8 +10,8 @@ export function publicLanguage(pathname: string): PublicLanguage | undefined {
 }
 
 const descriptions = {
-  en: "Koma is a self-hosted AI video analysis tool for lessons, interviews, and demos. Turn uploads or direct MP4 URLs into summaries, searchable transcripts, chapters, key frames, and structured data; export Markdown, SRT, or JSON.",
-  zh: "Koma 是可自行部署的 AI 视频总结与分析工具。上传课程、访谈或演示视频，或粘贴 MP4 视频直链，提取可搜索字幕、章节、关键帧与自定义数据，导出 Markdown、SRT 或 JSON。"
+  en: "Koma is a self-hosted AI video analysis website. Upload a video or paste a direct MP4 URL to get summaries, searchable subtitles, chapters, and key frames. Revisit the source or export Markdown, SRT, and JSON.",
+  zh: "Koma 是可自行部署的 AI 视频分析网站。上传视频或粘贴 MP4 直链，生成摘要、可搜索字幕、章节和关键帧。点击结果回看原片，或导出 Markdown、SRT 与 JSON。"
 };
 const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
